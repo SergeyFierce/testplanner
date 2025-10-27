@@ -1,11 +1,15 @@
 package com.sergeyfierce.testplanner.ui.theme
 
+import android.app.Activity
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
@@ -32,15 +36,19 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun TestplannerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    accentColor: Color = Color(0xFF3b82f6),
+    // Dynamic color is available on Android 12+
+    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val baseScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-    val colorScheme = baseScheme.copy(
-        primary = accentColor,
-        secondary = accentColor,
-        tertiary = accentColor
-    )
+    val colorScheme = when {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            val context = LocalContext.current
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+
+        darkTheme -> DarkColorScheme
+        else -> LightColorScheme
+    }
 
     MaterialTheme(
         colorScheme = colorScheme,
