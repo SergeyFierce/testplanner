@@ -1,0 +1,22 @@
+package com.sergeyfierce.testplanner.domain.model
+
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+
+data class Task(
+    val id: String,
+    val parentId: String?,
+    val title: String,
+    val description: String?,
+    val date: LocalDate,
+    val type: TaskType,
+    val start: LocalTime,
+    val end: LocalTime?,
+    val isImportant: Boolean,
+    val isDone: Boolean,
+    val createdAt: String,
+    val updatedAt: String
+) {
+    val isInterval: Boolean get() = type == TaskType.INTERVAL
+    val isMainActivity: Boolean get() = isInterval && parentId == null
+}
