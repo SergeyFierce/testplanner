@@ -4,10 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.calculateBottomPadding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
@@ -15,8 +11,8 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -56,17 +52,37 @@ fun PlannerApp(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        val navigationPadding = 24.dp
-        val bottomInsetPadding = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
-        val navigationBarBottomPadding = navigationPadding + NavigationBarDefaults.ContainerHeight + bottomInsetPadding
-
+    Scaffold(
+        bottomBar = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 24.dp)
+            ) {
+                PlannerNavigationBar(
+                    destinations = items,
+                    currentDestination = currentRoute,
+                    onDestinationSelected = { destination ->
+                        navController.navigate(destination.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                )
+            }
+        }
+    ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = PlannerDestination.CALENDAR.route,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = navigationBarBottomPadding)
+            modifier = Modifier.padding(innerPadding)
         ) {
             composable(PlannerDestination.CALENDAR.route) {
                 val viewModel: CalendarViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
@@ -81,24 +97,6 @@ fun PlannerApp(
                 PlaceholderScreen(text = stringResource(id = R.string.settings_placeholder))
             }
         }
-
-        PlannerNavigationBar(
-            destinations = items,
-            currentDestination = currentRoute,
-            onDestinationSelected = { destination ->
-                navController.navigate(destination.route) {
-                    popUpTo(navController.graph.findStartDestination().id) {
-                        saveState = true
-                    }
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = navigationPadding, bottom = navigationPadding + bottomInsetPadding)
-                .fillMaxWidth()
-        )
     }
 }
 
