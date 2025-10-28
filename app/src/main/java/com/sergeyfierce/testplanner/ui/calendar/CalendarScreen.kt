@@ -1,13 +1,20 @@
 package com.sergeyfierce.testplanner.ui.calendar
 
-import android.graphics.Paint
 import android.widget.EditText
 import android.widget.NumberPicker
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,15 +43,17 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,6 +71,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -80,6 +91,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -159,6 +171,7 @@ fun CalendarScreen(
                     onDateClick = { isDatePickerVisible = true }
                 )
             },
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             floatingActionButton = {
                 FloatingActionButton(onClick = {
                     editingTask = null
@@ -181,36 +194,43 @@ fun CalendarScreen(
                     onModeSelected = viewModel::onModeSelected
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                when (uiState.selectedMode) {
-                    CalendarMode.DAY -> DayTimeline(
-                        tasks = uiState.dayTasks,
-                        isToday = isToday,
-                        onToggle = viewModel::onToggleTask,
-                        onAddFromSlot = { start ->
-                            editingTask = null
-                            editorDefaultStart = start
-                            editorInitialType = TaskType.POINT
-                            isEditorVisible = true
-                        },
-                        onEdit = { task ->
-                            editingTask = task
-                            editorInitialType = task.type
-                            editorDefaultStart = task.start
-                            isEditorVisible = true
-                        },
-                        onDelete = { task -> pendingDeleteTask = task }
-                    )
-                    CalendarMode.WEEK -> WeekView(
-                        currentDate = uiState.currentDate,
-                        weekTasks = uiState.weekTasks,
-                        onDayClick = viewModel::onDaySelected
-                    )
-                    CalendarMode.MONTH -> MonthView(
-                        currentDate = uiState.currentDate,
-                        monthTasks = uiState.monthTasks,
-                        onDayClick = viewModel::onDaySelected
-                    )
-                }
+                AnimatedCalendarContent(
+                    mode = uiState.selectedMode,
+                    dayContent = {
+                        DayTimeline(
+                            tasks = uiState.dayTasks,
+                            isToday = isToday,
+                            onToggle = viewModel::onToggleTask,
+                            onAddFromSlot = { start ->
+                                editingTask = null
+                                editorDefaultStart = start
+                                editorInitialType = TaskType.POINT
+                                isEditorVisible = true
+                            },
+                            onEdit = { task ->
+                                editingTask = task
+                                editorInitialType = task.type
+                                editorDefaultStart = task.start
+                                isEditorVisible = true
+                            },
+                            onDelete = { task -> pendingDeleteTask = task }
+                        )
+                    },
+                    weekContent = {
+                        WeekView(
+                            currentDate = uiState.currentDate,
+                            weekTasks = uiState.weekTasks,
+                            onDayClick = viewModel::onDaySelected
+                        )
+                    },
+                    monthContent = {
+                        MonthView(
+                            currentDate = uiState.currentDate,
+                            monthTasks = uiState.monthTasks,
+                            onDayClick = viewModel::onDaySelected
+                        )
+                    }
+                )
             }
         }
 
@@ -264,9 +284,7 @@ fun CalendarScreen(
                 onDismissRequest = { pendingDeleteTask = null },
                 title = { Text(text = stringResource(id = R.string.dialog_delete_title)) },
                 text = {
-                    Text(
-                        text = stringResource(id = R.string.dialog_delete_message, task.title)
-                    )
+                    Text(text = stringResource(id = R.string.dialog_delete_message))
                 },
                 confirmButton = {
                     TextButton(onClick = {
@@ -297,26 +315,34 @@ private fun CalendarTopBar(
     val formatter = remember { DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.getDefault()) }
     TopAppBar(
         title = {
-            Text(
-                text = formatter.format(currentDate.toJavaLocalDate()),
-                modifier = Modifier.clickable(onClick = onDateClick)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onPrevious) {
+                    Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = null)
+                }
+                Text(
+                    text = formatter.format(currentDate.toJavaLocalDate()),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(onClick = onDateClick),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                IconButton(onClick = onNext) {
+                    Icon(imageVector = Icons.Filled.ArrowForward, contentDescription = null)
+                }
+            }
         },
         actions = {
             TextButton(onClick = onToday) {
                 Text(text = stringResource(id = R.string.today))
             }
         },
-        navigationIcon = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onPrevious) {
-                    Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = null)
-                }
-                IconButton(onClick = onNext) {
-                    Icon(imageVector = Icons.Filled.ArrowForward, contentDescription = null)
-                }
-            }
-        }
+        navigationIcon = {},
+        windowInsets = TopAppBarDefaults.windowInsets
     )
 }
 
@@ -340,6 +366,32 @@ private fun CalendarModeSelector(
             ) {
                 Text(text = label)
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+private fun AnimatedCalendarContent(
+    mode: CalendarMode,
+    dayContent: @Composable () -> Unit,
+    weekContent: @Composable () -> Unit,
+    monthContent: @Composable () -> Unit
+) {
+    AnimatedContent(
+        targetState = mode,
+        transitionSpec = {
+            val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+            (slideInHorizontally(animationSpec = tween(), initialOffsetX = { it * direction }) + fadeIn())
+                .togetherWith(
+                    slideOutHorizontally(animationSpec = tween(), targetOffsetX = { -it * direction }) + fadeOut()
+                )
+        }, label = "calendar-mode"
+    ) { state ->
+        when (state) {
+            CalendarMode.DAY -> dayContent()
+            CalendarMode.WEEK -> weekContent()
+            CalendarMode.MONTH -> monthContent()
         }
     }
 }
@@ -690,11 +742,25 @@ private fun NestedPointTaskCard(
 
 @Composable
 private fun WeekTaskPreview(task: Task) {
+    val (containerColor, contentColor, border) = when {
+        task.isDone -> Triple(TaskDoneGreen, MaterialTheme.colorScheme.onPrimaryContainer, null)
+        task.isImportant -> Triple(
+            MaterialTheme.colorScheme.errorContainer,
+            MaterialTheme.colorScheme.onErrorContainer,
+            null
+        )
+        else -> Triple(
+            MaterialTheme.colorScheme.surface,
+            MaterialTheme.colorScheme.onSurface,
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        )
+    }
     Surface(
         shape = RoundedCornerShape(12.dp),
         tonalElevation = 2.dp,
-        color = taskContainerColor(task),
-        contentColor = taskContentColor(task),
+        color = containerColor,
+        contentColor = contentColor,
+        border = border,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -720,13 +786,14 @@ private fun WeekTaskPreview(task: Task) {
 @Composable
 private fun ImportantDot(
     visible: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.error
 ) {
     if (visible) {
         Box(
             modifier = modifier
                 .size(10.dp)
-                .background(color = MaterialTheme.colorScheme.error, shape = CircleShape)
+                .background(color = color, shape = CircleShape)
         )
     }
 }
@@ -831,6 +898,7 @@ private fun MonthView(
                     else -> MaterialTheme.colorScheme.surface
                 },
                 tonalElevation = if (isCurrentMonth) 2.dp else 0.dp,
+                border = if (isCurrentMonth) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .height(64.dp)
                     .fillMaxWidth()
@@ -852,7 +920,8 @@ private fun MonthView(
                     )
                     ImportantDot(
                         visible = hasImportant,
-                        modifier = Modifier.align(Alignment.TopEnd)
+                        modifier = Modifier.align(Alignment.TopEnd),
+                        color = Color(0xFFD32F2F)
                     )
                     if (tasksForDay.isNotEmpty()) {
                         BadgedBox(
@@ -891,10 +960,14 @@ private fun TaskEditorScreen(
         mutableStateOf(initialTask?.date ?: defaultDate)
     }
 
-    val initialStart = remember(initialTask, defaultStart) {
-        initialTask?.start ?: defaultStart ?: LocalTime(9, 0)
+    val nowTime = remember {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).time
+        LocalTime(now.hour, now.minute)
     }
-    val initialEndCandidate = remember(initialTask) {
+    val initialStart = remember(initialTask, defaultStart, nowTime) {
+        initialTask?.start ?: defaultStart ?: nowTime
+    }
+    val initialEndCandidate = remember(initialTask, initialStart) {
         initialTask?.end ?: defaultEndFor(initialStart)
     }
 
@@ -1088,18 +1161,10 @@ private fun TaskEditorScreen(
                 }
                 ImportantSelector(isImportant = isImportant, onChanged = { isImportant = it })
                 scheduleError?.let {
-                    Text(
-                        text = it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    ErrorMessageCard(text = it)
                 }
                 saveError?.takeIf { it != scheduleError }?.let {
-                    Text(
-                        text = it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    ErrorMessageCard(text = it)
                 }
             }
         }
@@ -1154,18 +1219,40 @@ private fun TypeSelector(selected: TaskType, onSelect: (TaskType) -> Unit) {
 
 @Composable
 private fun ImportantSelector(isImportant: Boolean, onChanged: (Boolean) -> Unit) {
-    FilterChip(
-        selected = isImportant,
-        onClick = { onChanged(!isImportant) },
-        label = { Text(text = stringResource(id = R.string.field_important)) },
-        leadingIcon = { Icon(imageVector = Icons.Filled.PriorityHigh, contentDescription = null) },
-        colors = FilterChipDefaults.filterChipColors(
-            iconColor = MaterialTheme.colorScheme.onSurfaceVariant,            // ← было leadingIconColor
-            selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onErrorContainer,
-            selectedLeadingIconColor = MaterialTheme.colorScheme.onErrorContainer
+    val buttonColors = if (isImportant) {
+        ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.error,
+            contentColor = MaterialTheme.colorScheme.onError
         )
-    )
+    } else {
+        ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        )
+    }
+    Button(
+        onClick = { onChanged(!isImportant) },
+        colors = buttonColors
+    ) {
+        Icon(imageVector = Icons.Filled.PriorityHigh, contentDescription = null)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = stringResource(id = R.string.field_important))
+    }
+}
+
+@Composable
+private fun ErrorMessageCard(text: String) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.onError,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        )
+    }
 }
 
 
@@ -1276,11 +1363,9 @@ private fun NumberWheel(
 }
 
 private fun defaultEndFor(start: LocalTime): LocalTime {
-    return if (start.hour == 23) {
-        if (start.minute >= 59) start else LocalTime(23, 59)
-    } else {
-        LocalTime((start.hour + 1).coerceAtMost(23), start.minute)
-    }
+    val totalMinutes = start.hour * 60 + start.minute + 1
+    val clamped = totalMinutes.coerceAtMost(23 * 60 + 59)
+    return LocalTime(clamped / 60, clamped % 60)
 }
 
 private fun LocalDate.toEpochMillis(): Long =
