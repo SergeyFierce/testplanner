@@ -14,6 +14,8 @@
     <string name="new_task">Новая задача</string>
     <string name="edit_task">Редактирование задачи</string>
     <string name="save">Сохранить</string>
+    <string name="dialog_delete_title">Удалить задачу?</string>
+    <string name="dialog_delete_message">Действительно удалить задачу "%1$s"?</string>
     <string name="field_title">Название</string>
     <string name="field_description">Описание</string>
     <string name="field_start">Начало</string>

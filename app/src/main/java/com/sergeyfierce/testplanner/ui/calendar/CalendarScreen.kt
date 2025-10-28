@@ -1,13 +1,13 @@
 package com.sergeyfierce.testplanner.ui.calendar
 
+import android.graphics.Paint
+import android.widget.EditText
 import android.widget.NumberPicker
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,15 +29,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,15 +70,19 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.children
 import com.sergeyfierce.testplanner.R
 import com.sergeyfierce.testplanner.domain.model.CalendarMode
 import com.sergeyfierce.testplanner.domain.model.Task
@@ -113,6 +123,7 @@ fun CalendarScreen(
     var editingTask by remember { mutableStateOf<Task?>(null) }
     var editorDefaultStart by remember { mutableStateOf<LocalTime?>(null) }
     var editorInitialType by remember { mutableStateOf(TaskType.POINT) }
+    var pendingDeleteTask by remember { mutableStateOf<Task?>(null) }
 
     val isToday = uiState.currentDate == today()
 
@@ -128,6 +139,10 @@ fun CalendarScreen(
         editingTask = null
         editorDefaultStart = null
         editorInitialType = TaskType.POINT
+    }
+
+    BackHandler(enabled = isEditorVisible) {
+        resetEditorState()
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -182,7 +197,7 @@ fun CalendarScreen(
                             editorDefaultStart = task.start
                             isEditorVisible = true
                         },
-                        onDelete = viewModel::onDeleteTask
+                        onDelete = { task -> pendingDeleteTask = task }
                     )
                     CalendarMode.WEEK -> WeekView(
                         currentDate = uiState.currentDate,
@@ -204,6 +219,9 @@ fun CalendarScreen(
                 defaultDate = uiState.currentDate,
                 defaultStart = editorDefaultStart,
                 initialType = editorInitialType,
+                onValidateSchedule = { id, date, type, start, end ->
+                    viewModel.validateSchedule(id, date, type, start, end)
+                },
                 onDismiss = { resetEditorState() },
                 onCreate = { title, description, date, type, start, end, isImportant ->
                     viewModel.createTask(title, description, date, type, start, end, isImportant)
@@ -238,6 +256,31 @@ fun CalendarScreen(
             ) {
                 DatePicker(state = datePickerState)
             }
+        }
+
+        pendingDeleteTask?.let { task ->
+            AlertDialog(
+                onDismissRequest = { pendingDeleteTask = null },
+                title = { Text(text = stringResource(id = R.string.dialog_delete_title)) },
+                text = {
+                    Text(
+                        text = stringResource(id = R.string.dialog_delete_message, task.title)
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.onDeleteTask(task)
+                        pendingDeleteTask = null
+                    }) {
+                        Text(text = stringResource(android.R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingDeleteTask = null }) {
+                        Text(text = stringResource(android.R.string.cancel))
+                    }
+                }
+            )
         }
     }
 }
@@ -350,6 +393,7 @@ private fun DayTimeline(
                     if (item.task.isInterval) {
                         IntervalTaskCard(
                             task = item.task,
+                            nestedPoints = item.nestedPoints,
                             onToggle = onToggle,
                             onEdit = onEdit,
                             onDelete = onDelete
@@ -431,29 +475,54 @@ private fun FreeTimeCard(
 
 private sealed interface DayTimelineItem {
     data class FreeTime(val start: LocalTime, val endExclusive: LocalTime?) : DayTimelineItem
-    data class TaskBlock(val task: Task) : DayTimelineItem
+    data class TaskBlock(val task: Task, val nestedPoints: List<Task> = emptyList()) : DayTimelineItem
 }
 
 private fun buildTimeline(tasks: List<Task>): List<DayTimelineItem> {
     if (tasks.isEmpty()) {
         return listOf(DayTimelineItem.FreeTime(LocalTime(0, 0), null))
     }
+
+    val sortedTasks = tasks.sortedWith(compareBy<Task> { it.start }.thenBy { it.title })
+    val pointTasks = sortedTasks.filter { !it.isInterval }
+    val consumedPointIds = mutableSetOf<String>()
+
     val result = mutableListOf<DayTimelineItem>()
     var cursor = LocalTime(0, 0)
-    tasks.forEach { task ->
-        val start = task.start
-        if (cursor < start) {
-            result += DayTimelineItem.FreeTime(cursor, start)
-        }
-        result += DayTimelineItem.TaskBlock(task = task)
-        val end = task.end ?: task.start
-        if (end > cursor) {
-            cursor = end
+
+    sortedTasks.forEach { task ->
+        if (task.isInterval) {
+            val start = task.start
+            val end = task.end ?: task.start
+            if (cursor < start) {
+                result += DayTimelineItem.FreeTime(cursor, start)
+            }
+            val nested = pointTasks
+                .filter { candidate ->
+                    candidate.id !in consumedPointIds && candidate.start >= start && candidate.start < end
+                }
+                .sortedBy { it.start }
+            consumedPointIds += nested.map { it.id }
+            result += DayTimelineItem.TaskBlock(task = task, nestedPoints = nested)
+            if (end > cursor) {
+                cursor = end
+            }
+        } else if (task.id !in consumedPointIds) {
+            val start = task.start
+            if (cursor < start) {
+                result += DayTimelineItem.FreeTime(cursor, start)
+            }
+            result += DayTimelineItem.TaskBlock(task = task)
+            if (start > cursor) {
+                cursor = start
+            }
         }
     }
+
     if (cursor < LocalTime(23, 59)) {
         result += DayTimelineItem.FreeTime(cursor, null)
     }
+
     return result
 }
 
@@ -463,60 +532,88 @@ private fun timeRangeLabel(task: Task): String {
     val endPart = task.end?.let { " - ${it.toTimeLabel()}" } ?: ""
     return "${task.start.toTimeLabel()}$endPart"
 }
+
+private val LocalDateSaver = Saver<LocalDate, String>(
+    save = { it.toString() },
+    restore = { LocalDate.parse(it) }
+)
+
+@Composable
+private fun taskContainerColor(task: Task): Color = when {
+    task.isDone -> TaskDoneGreen
+    task.isImportant -> MaterialTheme.colorScheme.errorContainer
+    task.isInterval -> MaterialTheme.colorScheme.primaryContainer
+    else -> MaterialTheme.colorScheme.secondaryContainer
+}
+
+@Composable
+private fun taskContentColor(task: Task): Color = when {
+    task.isDone -> MaterialTheme.colorScheme.onPrimaryContainer
+    task.isImportant -> MaterialTheme.colorScheme.onErrorContainer
+    task.isInterval -> MaterialTheme.colorScheme.onPrimaryContainer
+    else -> MaterialTheme.colorScheme.onSecondaryContainer
+}
 @Composable
 private fun IntervalTaskCard(
     task: Task,
+    nestedPoints: List<Task>,
     onToggle: (Task, Boolean) -> Unit,
     onEdit: (Task) -> Unit,
     onDelete: (Task) -> Unit
 ) {
-    Box(modifier = Modifier.fillMaxWidth()) {
-        val containerColor = if (task.isDone) TaskDoneGreen else MaterialTheme.colorScheme.primaryContainer
-        Surface(
-            tonalElevation = 6.dp,
-            shape = RoundedCornerShape(16.dp),
-            color = containerColor,
-            modifier = Modifier.fillMaxWidth()
+    Surface(
+        tonalElevation = 6.dp,
+        shape = RoundedCornerShape(16.dp),
+        color = taskContainerColor(task),
+        contentColor = taskContentColor(task),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = task.isDone,
-                        onCheckedChange = { onToggle(task, it) }
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = task.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = timeRangeLabel(task),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    IconButton(onClick = { onEdit(task) }) {
-                        Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
-                    }
-                    IconButton(onClick = { onDelete(task) }) {
-                        Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
-                    }
-                }
-                if (!task.description.isNullOrBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = task.isDone,
+                    onCheckedChange = { onToggle(task, it) }
+                )
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = task.description!!,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 8.dp)
+                        text = task.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
+                    Text(
+                        text = timeRangeLabel(task),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                IconButton(onClick = { onEdit(task) }) {
+                    Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
+                }
+                IconButton(onClick = { onDelete(task) }) {
+                    Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                }
+            }
+            if (!task.description.isNullOrBlank()) {
+                Text(
+                    text = task.description!!,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (nestedPoints.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    nestedPoints.forEach { nested ->
+                        NestedPointTaskCard(
+                            task = nested,
+                            onToggle = onToggle,
+                            onEdit = onEdit,
+                            onDelete = onDelete
+                        )
+                    }
                 }
             }
         }
-        ImportantBadge(
-            visible = task.isImportant,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = (-12).dp, y = 12.dp)
-        )
     }
 }
 
@@ -527,54 +624,94 @@ private fun PointTaskCard(
     onEdit: (Task) -> Unit,
     onDelete: (Task) -> Unit
 ) {
-    Box(modifier = Modifier.fillMaxWidth()) {
-        val containerColor = when {
-            task.isDone -> TaskDoneGreen
-            task.isImportant -> MaterialTheme.colorScheme.errorContainer
-            else -> MaterialTheme.colorScheme.secondaryContainer
-        }
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            tonalElevation = 4.dp,
-            color = containerColor,
-            modifier = Modifier.fillMaxWidth()
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = 4.dp,
+        color = taskContainerColor(task),
+        contentColor = taskContentColor(task),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .fillMaxWidth()
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .fillMaxWidth()
-            ) {
-                Checkbox(checked = task.isDone, onCheckedChange = { onToggle(task, it) })
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = task.title, style = MaterialTheme.typography.bodyMedium)
-                    Text(text = timeRangeLabel(task), style = MaterialTheme.typography.bodySmall)
-                }
-                IconButton(onClick = { onEdit(task) }) {
-                    Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
-                }
-                IconButton(onClick = { onDelete(task) }) {
-                    Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
-                }
+            Checkbox(checked = task.isDone, onCheckedChange = { onToggle(task, it) })
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = task.title, style = MaterialTheme.typography.bodyMedium)
+                Text(text = timeRangeLabel(task), style = MaterialTheme.typography.bodySmall)
+            }
+            IconButton(onClick = { onEdit(task) }) {
+                Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
+            }
+            IconButton(onClick = { onDelete(task) }) {
+                Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
             }
         }
-        ImportantBadge(
-            visible = task.isImportant,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = (-12).dp, y = 8.dp)
-        )
     }
 }
 
 @Composable
-private fun ImportantBadge(
-    visible: Boolean,
-    modifier: Modifier = Modifier
+private fun NestedPointTaskCard(
+    task: Task,
+    onToggle: (Task, Boolean) -> Unit,
+    onEdit: (Task) -> Unit,
+    onDelete: (Task) -> Unit
 ) {
-    if (visible) {
-        Badge(modifier = modifier) {
-            Text(text = "!")
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = 0.dp,
+        color = taskContainerColor(task),
+        contentColor = taskContentColor(task),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .fillMaxWidth()
+        ) {
+            Checkbox(checked = task.isDone, onCheckedChange = { onToggle(task, it) })
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = task.title, style = MaterialTheme.typography.bodyMedium)
+                Text(text = task.start.toTimeLabel(), style = MaterialTheme.typography.bodySmall)
+            }
+            IconButton(onClick = { onEdit(task) }) {
+                Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
+            }
+            IconButton(onClick = { onDelete(task) }) {
+                Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeekTaskPreview(task: Task) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = 2.dp,
+        color = taskContainerColor(task),
+        contentColor = taskContentColor(task),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = task.title,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = timeRangeLabel(task),
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
@@ -645,22 +782,9 @@ private fun WeekView(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        tasksForDay.take(4).forEach { task ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = "${task.start.toTimeLabel()} • ${task.title}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                ImportantBadge(
-                                    visible = task.isImportant,
-                                    modifier = Modifier.padding(start = 8.dp)
-                                )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            tasksForDay.take(4).forEach { task ->
+                                WeekTaskPreview(task = task)
                             }
                         }
                         if (tasksForDay.size > 4) {
@@ -710,32 +834,31 @@ private fun MonthView(
                     .height(64.dp)
                     .fillMaxWidth()
             ) {
-                Column(
+                Box(
                     modifier = Modifier
                         .padding(8.dp)
-                        .fillMaxSize(),
-                    verticalArrangement = Arrangement.SpaceBetween
+                        .fillMaxSize()
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = date.dayOfMonth.toString(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isCurrentMonth) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        ImportantDot(visible = hasImportant)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (tasksForDay.isNotEmpty()) {
-                            BadgedBox(badge = {
-                                Badge { Text(text = tasksForDay.size.toString()) }
-                            }) {
-                                Spacer(modifier = Modifier.height(0.dp))
-                            }
+                    Text(
+                        text = date.dayOfMonth.toString(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isCurrentMonth) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                    ImportantDot(
+                        visible = hasImportant,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    )
+                    if (tasksForDay.isNotEmpty()) {
+                        BadgedBox(
+                            badge = { Badge { Text(text = tasksForDay.size.toString()) } },
+                            modifier = Modifier.align(Alignment.BottomEnd)
+                        ) {
+                            Spacer(modifier = Modifier.height(0.dp))
                         }
                     }
                 }
@@ -750,6 +873,7 @@ private fun TaskEditorScreen(
     defaultDate: LocalDate,
     defaultStart: LocalTime?,
     initialType: TaskType,
+    onValidateSchedule: suspend (String?, LocalDate, TaskType, LocalTime, LocalTime?) -> String?,
     onDismiss: () -> Unit,
     onCreate: (String, String?, LocalDate, TaskType, LocalTime, LocalTime?, Boolean) -> Unit,
     onUpdate: (Task) -> Unit
@@ -758,10 +882,13 @@ private fun TaskEditorScreen(
 
     var title by rememberSaveable { mutableStateOf(initialTask?.title.orEmpty()) }
     var description by rememberSaveable { mutableStateOf(initialTask?.description.orEmpty()) }
-    var dateInput by rememberSaveable { mutableStateOf((initialTask?.date ?: defaultDate).toString()) }
     var type by rememberSaveable { mutableStateOf(initialTask?.type ?: initialType) }
     var isImportant by rememberSaveable { mutableStateOf(initialTask?.isImportant ?: false) }
-    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var saveError by rememberSaveable { mutableStateOf<String?>(null) }
+
+    var selectedDate by rememberSaveable(stateSaver = LocalDateSaver) {
+        mutableStateOf(initialTask?.date ?: defaultDate)
+    }
 
     val initialStart = remember(initialTask, defaultStart) {
         initialTask?.start ?: defaultStart ?: LocalTime(9, 0)
@@ -791,34 +918,54 @@ private fun TaskEditorScreen(
         }
     }
 
+    var scheduleError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(selectedDate, type, startTime, endTime) {
+        scheduleError = if (type == TaskType.INTERVAL && endTime == null) {
+            context.getString(R.string.error_end_required)
+        } else {
+            onValidateSchedule(initialTask?.id, selectedDate, type, startTime, endTime)
+        }
+    }
+
+    LaunchedEffect(scheduleError) {
+        if (scheduleError == null) {
+            saveError = null
+        }
+    }
+
+    val dateFormatter = remember {
+        DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.getDefault())
+    }
+
+    var isDatePickerVisible by rememberSaveable { mutableStateOf(false) }
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate.toEpochMillis())
+
+    LaunchedEffect(selectedDate) {
+        datePickerState.selectedDateMillis = selectedDate.toEpochMillis()
+    }
+
     fun handleSave() {
+        saveError = null
         if (title.isBlank()) {
-            errorMessage = context.getString(R.string.error_title_required)
+            saveError = context.getString(R.string.error_title_required)
             return
         }
-        val parsedDate = runCatching { LocalDate.parse(dateInput) }.getOrNull()
-        if (parsedDate == null) {
-            errorMessage = context.getString(R.string.error_date_required)
+        if (scheduleError != null) {
+            saveError = scheduleError
             return
         }
-        val start = LocalTime(startHour, startMinute)
-        val end = if (type == TaskType.INTERVAL) LocalTime(endHour, endMinute) else null
-        if (type == TaskType.INTERVAL && end == null) {
-            errorMessage = context.getString(R.string.error_end_required)
-            return
-        }
-        errorMessage = null
         val trimmedDescription = description.takeIf { it.isNotBlank() }
+        val end = if (type == TaskType.INTERVAL) LocalTime(endHour, endMinute) else null
         if (initialTask == null) {
-            onCreate(title, trimmedDescription, parsedDate, type, start, end, isImportant)
+            onCreate(title, trimmedDescription, selectedDate, type, startTime, end, isImportant)
         } else {
             onUpdate(
                 initialTask.copy(
                     title = title,
                     description = trimmedDescription,
-                    date = parsedDate,
+                    date = selectedDate,
                     type = type,
-                    start = start,
+                    start = startTime,
                     end = end,
                     isImportant = isImportant
                 )
@@ -849,7 +996,10 @@ private fun TaskEditorScreen(
                         }
                     },
                     actions = {
-                        TextButton(onClick = { handleSave() }) {
+                        TextButton(
+                            onClick = { handleSave() },
+                            enabled = scheduleError == null && title.isNotBlank()
+                        ) {
                             Text(text = stringResource(id = R.string.save))
                         }
                     }
@@ -865,50 +1015,116 @@ private fun TaskEditorScreen(
             ) {
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = {
+                        title = it
+                        if (saveError != null) saveError = null
+                    },
                     label = { Text(text = stringResource(id = R.string.field_title)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = description,
-                    onValueChange = { description = it },
+                    onValueChange = {
+                        description = it
+                        if (saveError != null && saveError != scheduleError) saveError = null
+                    },
                     label = { Text(text = stringResource(id = R.string.field_description)) },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = dateInput,
-                    onValueChange = { dateInput = it },
-                    label = { Text(text = stringResource(id = R.string.field_date)) },
-                    singleLine = true,
+                Surface(
+                    onClick = { isDatePickerVisible = true },
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    tonalElevation = 0.dp,
                     modifier = Modifier.fillMaxWidth()
-                )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Filled.CalendarToday, contentDescription = null)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(id = R.string.field_date),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = dateFormatter.format(selectedDate.toJavaLocalDate()),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
                 TypeSelector(selected = type, onSelect = { type = it })
-                WheelTimePicker(
-                    label = stringResource(id = R.string.field_start),
-                    hour = startHour,
-                    minute = startMinute,
-                    onHourChanged = { startHour = it },
-                    onMinuteChanged = { startMinute = it }
-                )
-                AnimatedVisibility(visible = type == TaskType.INTERVAL, enter = fadeIn(), exit = fadeOut()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                     WheelTimePicker(
-                        label = stringResource(id = R.string.field_end),
-                        hour = endHour,
-                        minute = endMinute,
-                        onHourChanged = { endHour = it },
-                        onMinuteChanged = { endMinute = it }
+                        label = stringResource(id = R.string.field_start),
+                        hour = startHour,
+                        minute = startMinute,
+                        onHourChanged = { startHour = it },
+                        onMinuteChanged = { startMinute = it },
+                        modifier = Modifier.weight(1f)
                     )
+                    if (type == TaskType.INTERVAL) {
+                        WheelTimePicker(
+                            label = stringResource(id = R.string.field_end),
+                            hour = endHour,
+                            minute = endMinute,
+                            onHourChanged = { endHour = it },
+                            onMinuteChanged = { endMinute = it },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
                 ImportantSelector(isImportant = isImportant, onChanged = { isImportant = it })
-                if (errorMessage != null) {
+                scheduleError?.let {
                     Text(
-                        text = errorMessage!!,
+                        text = it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                saveError?.takeIf { it != scheduleError }?.let {
+                    Text(
+                        text = it,
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
+        }
+    }
+
+    if (isDatePickerVisible) {
+        DatePickerDialog(
+            onDismissRequest = { isDatePickerVisible = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val selectedMillis = datePickerState.selectedDateMillis
+                    if (selectedMillis != null) {
+                        selectedDate = selectedMillis.toLocalDate()
+                    }
+                    isDatePickerVisible = false
+                }) {
+                    Text(text = stringResource(android.R.string.ok))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { isDatePickerVisible = false }) {
+                    Text(text = stringResource(android.R.string.cancel))
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }
@@ -937,10 +1153,20 @@ private fun TypeSelector(selected: TaskType, onSelect: (TaskType) -> Unit) {
 
 @Composable
 private fun ImportantSelector(isImportant: Boolean, onChanged: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = isImportant, onCheckedChange = onChanged)
-        Text(text = stringResource(id = R.string.field_important))
-    }
+    FilterChip(
+        selected = isImportant,
+        onClick = { onChanged(!isImportant) },
+        label = { Text(text = stringResource(id = R.string.field_important)) },
+        leadingIcon = {
+            Icon(imageVector = Icons.Filled.PriorityHigh, contentDescription = null)
+        },
+        colors = FilterChipDefaults.filterChipColors(
+            leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onErrorContainer,
+            selectedLeadingIconColor = MaterialTheme.colorScheme.onErrorContainer
+        )
+    )
 }
 
 @Composable
@@ -949,23 +1175,38 @@ private fun WheelTimePicker(
     hour: Int,
     minute: Int,
     onHourChanged: (Int) -> Unit,
-    onMinuteChanged: (Int) -> Unit
+    onMinuteChanged: (Int) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val valueColor = MaterialTheme.colorScheme.onSurface
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         Text(text = label, style = MaterialTheme.typography.titleSmall)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             NumberWheel(
                 range = 0..23,
                 value = hour,
                 onValueChange = onHourChanged,
-                modifier = Modifier.width(80.dp)
+                modifier = Modifier.weight(1f),
+                textColor = valueColor
             )
-            Text(text = ":", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = ":",
+                style = MaterialTheme.typography.titleLarge,
+                color = valueColor
+            )
             NumberWheel(
                 range = 0..59,
                 value = minute,
                 onValueChange = onMinuteChanged,
-                modifier = Modifier.width(80.dp)
+                modifier = Modifier.weight(1f),
+                textColor = valueColor
             )
         }
     }
@@ -976,10 +1217,11 @@ private fun NumberWheel(
     range: IntRange,
     value: Int,
     onValueChange: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    textColor: Color
 ) {
     AndroidView(
-        modifier = modifier.height(120.dp),
+        modifier = modifier.height(140.dp),
         factory = { context ->
             NumberPicker(context).apply {
                 minValue = range.first
@@ -989,6 +1231,7 @@ private fun NumberWheel(
                 descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
                 setFormatter { "%02d".format(it) }
                 setOnValueChangedListener { _, _, newVal -> onValueChange(newVal) }
+                setWheelTextColor(textColor.toArgb())
             }
         },
         update = { picker ->
@@ -1000,8 +1243,24 @@ private fun NumberWheel(
                 picker.value = value.coerceIn(range)
             }
             picker.setFormatter { "%02d".format(it) }
+            picker.setWheelTextColor(textColor.toArgb())
         }
     )
+}
+
+private fun NumberPicker.setWheelTextColor(color: Int) {
+    try {
+        val field = NumberPicker::class.java.getDeclaredField("mSelectorWheelPaint")
+        field.isAccessible = true
+        (field.get(this) as? Paint)?.color = color
+    } catch (_: Exception) {
+    }
+    children.forEach { child ->
+        if (child is EditText) {
+            child.setTextColor(color)
+        }
+    }
+    invalidate()
 }
 
 private fun defaultEndFor(start: LocalTime): LocalTime {
