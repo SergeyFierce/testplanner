@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.sergeyfierce.testplanner"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -43,6 +43,8 @@ android {
 }
 
 dependencies {
+    implementation(platform("androidx.compose:compose-bom:2024.09.01"))
+    implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

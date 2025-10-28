@@ -108,9 +108,9 @@ class TaskRepository(private val dao: TaskDao) {
             require(parent.type == TaskType.INTERVAL) { "Родитель должен быть интервалом" }
             require(parent.date == task.date) { "Дата подзадачи должна совпадать с родителем" }
             val parentEnd = requireNotNull(parent.end)
-            require(!task.start.isBefore(parent.start)) { "Подзадача должна начинаться не раньше родителя" }
+            require(task.start >= parent.start) { "Подзадача должна начинаться не раньше родителя" }
             val effectiveEnd = task.end ?: task.start
-            require(!effectiveEnd.isAfter(parentEnd)) { "Подзадача должна завершаться до окончания родителя" }
+            require(effectiveEnd <= parentEnd) { "Подзадача должна завершаться до окончания родителя" }
         }
 
         val sameDayTasks = dao.getTasksForDate(task.date.toString())
@@ -133,8 +133,9 @@ class TaskRepository(private val dao: TaskDao) {
             parent?.let {
                 val parentEnd = requireNotNull(it.end)
                 val effectiveEnd = task.end ?: task.start
-                require(!task.start.isBefore(it.start))
-                require(!effectiveEnd.isAfter(parentEnd))
+                // заменили isBefore/isAfter на сравнения
+                require(task.start >= it.start)
+                require(effectiveEnd <= parentEnd)
             }
         }
     }

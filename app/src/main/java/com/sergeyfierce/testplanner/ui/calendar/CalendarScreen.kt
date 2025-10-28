@@ -1,5 +1,6 @@
 package com.sergeyfierce.testplanner.ui.calendar
 
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -60,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -215,6 +217,7 @@ fun CalendarScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CalendarTopBar(
     currentDate: LocalDate,
@@ -245,6 +248,7 @@ private fun CalendarTopBar(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CalendarModeSelector(
     selectedMode: CalendarMode,
@@ -297,7 +301,7 @@ private fun DayTimeline(
             val hourTime = LocalTime(hour, 0)
             val hourLabel = "%02d:00".format(hour)
             val tasksAtHour = mainActivities.filter { it.start.hour == hour } +
-                singleTasks.filter { it.start.hour == hour }
+                    singleTasks.filter { it.start.hour == hour }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -326,7 +330,6 @@ private fun DayTimeline(
                                 onEdit = onEdit,
                                 onDelete = onDelete
                             )
-
                             else -> PointTaskChip(
                                 task = task,
                                 onToggle = onToggle,
@@ -485,14 +488,15 @@ private fun WeekView(
     onDayClick: (LocalDate) -> Unit
 ) {
     val start = startOfWeek(currentDate)
-    val days = remember(start) { (0..6).map { start.plus(DatePeriod(days = it)) } }
+    val days: List<LocalDate> = remember(start) { (0..6).map { start.plus(DatePeriod(days = it)) } }
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(7),
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(days) { date ->
+        items(days) { date: LocalDate ->
             val tasksForDay = weekTasks[date].orEmpty()
             val isToday = date == today()
             Surface(
@@ -542,8 +546,7 @@ private fun MonthView(
     val yearMonth = remember(currentDate) { YearMonth.of(currentDate.year, currentDate.monthNumber) }
     val firstDay = LocalDate(currentDate.year, currentDate.monthNumber, 1)
     val firstDayOfWeek = startOfWeek(firstDay)
-    val totalDays = yearMonth.lengthOfMonth()
-    val days = remember(currentDate) {
+    val days: List<LocalDate> = remember(currentDate) {
         (0 until 42).map { offset -> firstDayOfWeek.plus(DatePeriod(days = offset)) }
     }
     LazyVerticalGrid(
@@ -552,7 +555,7 @@ private fun MonthView(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(days) { date ->
+        items(days) { date: LocalDate ->
             val isCurrentMonth = date.monthNumber == currentDate.monthNumber
             val tasksForDay = monthTasks[date].orEmpty()
             val hasImportant = tasksForDay.any { it.isImportant }
@@ -615,6 +618,8 @@ private fun TaskEditorDialog(
     onCreate: (String?, String, String?, LocalDate, TaskType, LocalTime, LocalTime?, Boolean) -> Unit,
     onUpdate: (Task) -> Unit
 ) {
+    val ctx = LocalContext.current
+
     var title by rememberSaveable { mutableStateOf(initialTask?.title.orEmpty()) }
     var description by rememberSaveable { mutableStateOf(initialTask?.description.orEmpty()) }
     var dateInput by rememberSaveable { mutableStateOf((initialTask?.date ?: defaultDate).toString()) }
@@ -630,12 +635,12 @@ private fun TaskEditorDialog(
         confirmButton = {
             Button(onClick = {
                 if (title.isBlank()) {
-                    errorMessage = stringResource(id = R.string.error_title_required)
+                    errorMessage = ctx.getString(R.string.error_title_required)
                     return@Button
                 }
                 val parsedDate = runCatching { LocalDate.parse(dateInput) }.getOrNull()
                 if (parsedDate == null) {
-                    errorMessage = stringResource(id = R.string.error_date_required)
+                    errorMessage = ctx.getString(R.string.error_date_required)
                     return@Button
                 }
                 val start = startInput.ifBlank { null }
@@ -643,11 +648,11 @@ private fun TaskEditorDialog(
                 val parsedStart = start?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
                 val parsedEnd = end?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
                 if (parsedStart == null) {
-                    errorMessage = stringResource(id = R.string.error_time_required)
+                    errorMessage = ctx.getString(R.string.error_time_required)
                     return@Button
                 }
                 if (type == TaskType.INTERVAL && parsedEnd == null) {
-                    errorMessage = stringResource(id = R.string.error_end_required)
+                    errorMessage = ctx.getString(R.string.error_end_required)
                     return@Button
                 }
                 if (initialTask == null) {
@@ -735,6 +740,7 @@ private fun TaskEditorDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TypeSelector(selected: TaskType, onSelect: (TaskType) -> Unit) {
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -781,9 +787,7 @@ private fun ParentSelector(
         Text(text = stringResource(id = R.string.field_parent))
         Spacer(modifier = Modifier.height(4.dp))
         AssistChip(
-            onClick = {
-                onParentSelected(null)
-            },
+            onClick = { onParentSelected(null) },
             label = { Text(text = stringResource(id = R.string.no_parent)) },
             colors = AssistChipDefaults.assistChipColors(
                 containerColor = if (selectedParentId == null) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
@@ -806,11 +810,3 @@ private fun timeRangeLabel(task: Task): String {
     val endPart = task.end?.let { " - $it" } ?: ""
     return "${task.start}$endPart"
 }
-
-private fun startOfWeek(date: LocalDate): LocalDate {
-    val isoDay = date.dayOfWeek.isoDayNumber
-    return date.minus(DatePeriod(days = isoDay - 1))
-}
-
-private fun today(): LocalDate = Clock.System.now()
-    .toLocalDateTime(TimeZone.currentSystemDefault()).date

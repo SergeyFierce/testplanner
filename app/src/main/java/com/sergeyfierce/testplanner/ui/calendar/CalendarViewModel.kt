@@ -22,11 +22,19 @@ import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.dayOfWeek
-import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.plus
 import kotlinx.datetime.minus
+import kotlinx.datetime.toJavaLocalDate
 import kotlinx.datetime.toLocalDateTime
+
+// Топ-левел: доступны из любых файлов пакета
+fun today(): LocalDate = Clock.System.now()
+    .toLocalDateTime(TimeZone.currentSystemDefault()).date
+
+fun startOfWeek(date: LocalDate): LocalDate {
+    val isoDay = date.toJavaLocalDate().dayOfWeek.value // 1..7 (ISO, понедельник=1)
+    return date.minus(DatePeriod(days = isoDay - 1))
+}
 
 data class CalendarUiState(
     val isLoading: Boolean = true,
@@ -168,16 +176,6 @@ class CalendarViewModel(
             block()
         } catch (error: Exception) {
             eventsFlow.emit(CalendarEvent.Error(error.message ?: "Произошла ошибка"))
-        }
-    }
-
-    companion object {
-        private fun today(): LocalDate = Clock.System.now()
-            .toLocalDateTime(TimeZone.currentSystemDefault()).date
-
-        private fun startOfWeek(date: LocalDate): LocalDate {
-            val isoDay = date.dayOfWeek.isoDayNumber
-            return date.minus(DatePeriod(days = isoDay - 1))
         }
     }
 }
