@@ -2,7 +2,6 @@ package com.sergeyfierce.testplanner.data.local
 
 import androidx.room.Dao
 import androidx.room.Query
-import androidx.room.Transaction
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -29,13 +28,4 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE date = :date")
     suspend fun getTasksForDate(date: String): List<TaskEntity>
 
-    @Query("SELECT * FROM tasks WHERE parent_id = :parentId")
-    suspend fun getChildren(parentId: String): List<TaskEntity>
-
-    @Transaction
-    suspend fun deleteCascade(taskId: String) {
-        val children = getChildren(taskId)
-        children.forEach { deleteById(it.id) }
-        deleteById(taskId)
-    }
 }

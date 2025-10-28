@@ -8,7 +8,6 @@ import kotlinx.datetime.LocalTime
 
 fun TaskEntity.toDomain(): Task = Task(
     id = id,
-    parentId = parentId,
     title = title,
     description = description,
     date = LocalDate.parse(date),
@@ -23,7 +22,6 @@ fun TaskEntity.toDomain(): Task = Task(
 
 fun Task.toEntity(): TaskEntity = TaskEntity(
     id = id,
-    parentId = parentId,
     title = title,
     description = description,
     date = date.toString(),
