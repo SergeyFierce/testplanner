@@ -16,7 +16,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -47,11 +49,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
@@ -59,7 +61,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PriorityHigh
-import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -96,6 +97,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -109,6 +111,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -121,6 +124,7 @@ import com.sergeyfierce.testplanner.domain.model.Task
 import com.sergeyfierce.testplanner.domain.model.TaskType
 import com.sergeyfierce.testplanner.ui.theme.TaskDoneGreen
 import com.sergeyfierce.testplanner.ui.theme.TaskDoneNestedGreen
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
@@ -136,7 +140,7 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun CalendarScreen(
     viewModel: CalendarViewModel,
@@ -164,6 +168,7 @@ fun CalendarScreen(
 
     val isToday = uiState.currentDate == today()
     val isSelectionMode = isSelectionModeActive
+    val showTodayButton = !isToday
     val selectedTasks = remember(uiState.dayTasks, selectedTaskIds) {
         uiState.dayTasks.filter { selectedTaskIds.contains(it.id) }
     }
@@ -218,43 +223,57 @@ fun CalendarScreen(
 
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            snackbarHost = {},
             topBar = {
-                if (isSelectionMode) {
-                    SelectionTopBar(
-                        selectedCount = selectedTasks.size,
-                        canEdit = canEditSelection,
-                        allSelected = allSelected,
-                        hasSelectableTasks = hasSelectableTasks,
-                        onToggleSelectAll = {
-                            if (allSelected) {
-                                selectedTaskIds = emptySet()
-                            } else {
-                                selectedTaskIds = allTaskIds.toSet()
-                                isSelectionModeActive = true
-                            }
-                        },
-                        onCancel = {
-                            selectedTaskIds = emptySet()
-                            isSelectionModeActive = false
-                        },
-                        onEdit = {
-                            selectedTasks.firstOrNull()?.let { task ->
+                AnimatedContent(
+                    targetState = isSelectionMode,
+                    transitionSpec = {
+                        (slideInVertically(animationSpec = tween(durationMillis = 250)) { fullHeight ->
+                            if (targetState) -fullHeight else fullHeight
+                        } + fadeIn()) togetherWith
+                            (slideOutVertically(animationSpec = tween(durationMillis = 250)) { fullHeight ->
+                                if (targetState) fullHeight else -fullHeight
+                            } + fadeOut())
+                    },
+                    label = "selection-top-bar"
+                ) { selectionActive ->
+                    if (selectionActive) {
+                        SelectionTopBar(
+                            selectedCount = selectedTasks.size,
+                            canEdit = canEditSelection,
+                            allSelected = allSelected,
+                            hasSelectableTasks = hasSelectableTasks,
+                            onToggleSelectAll = {
+                                if (allSelected) {
+                                    selectedTaskIds = emptySet()
+                                } else {
+                                    selectedTaskIds = allTaskIds.toSet()
+                                    isSelectionModeActive = true
+                                }
+                            },
+                            onCancel = {
                                 selectedTaskIds = emptySet()
                                 isSelectionModeActive = false
-                                openEditor(task)
-                            }
-                        },
-                        onDelete = { showDeleteConfirmation = true }
-                    )
-                } else {
-                    CalendarTopBar(
-                        currentDate = uiState.currentDate,
-                        onPrevious = viewModel::goToPrevious,
-                        onNext = viewModel::goToNext,
-                        onToday = viewModel::goToToday,
-                        onDateClick = { isDatePickerVisible = true }
-                    )
+                            },
+                            onEdit = {
+                                selectedTasks.firstOrNull()?.let { task ->
+                                    selectedTaskIds = emptySet()
+                                    isSelectionModeActive = false
+                                    openEditor(task)
+                                }
+                            },
+                            onDelete = { showDeleteConfirmation = true }
+                        )
+                    } else {
+                        CalendarTopBar(
+                            currentDate = uiState.currentDate,
+                            showTodayButton = showTodayButton,
+                            onPrevious = viewModel::goToPrevious,
+                            onNext = viewModel::goToNext,
+                            onToday = viewModel::goToToday,
+                            onDateClick = { isDatePickerVisible = true }
+                        )
+                    }
                 }
             },
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -350,7 +369,12 @@ fun CalendarScreen(
             }
         }
 
-        if (isEditorVisible) {
+        AnimatedVisibility(
+            visible = isEditorVisible,
+            enter = slideInHorizontally(animationSpec = tween(durationMillis = 300)) { it } + fadeIn(),
+            exit = slideOutHorizontally(animationSpec = tween(durationMillis = 300)) { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
             TaskEditorScreen(
                 initialTask = editingTask,
                 defaultDate = uiState.currentDate,
@@ -370,6 +394,13 @@ fun CalendarScreen(
                 }
             )
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp)
+        )
 
         if (isDatePickerVisible) {
             DatePickerDialog(
@@ -436,6 +467,7 @@ fun CalendarScreen(
 @Composable
 private fun CalendarTopBar(
     currentDate: LocalDate,
+    showTodayButton: Boolean,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onToday: () -> Unit,
@@ -456,32 +488,20 @@ private fun CalendarTopBar(
                     Icon(imageVector = Icons.Filled.KeyboardArrowLeft, contentDescription = null)
                 }
                 Surface(
-                    onClick = onDateClick,
                     shape = RoundedCornerShape(24.dp),
                     tonalElevation = 2.dp,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier
                         .padding(vertical = 4.dp, horizontal = 4.dp)
                 ) {
-                    Row(
+                    Text(
+                        text = formatter.format(currentDate.toJavaLocalDate()),
                         modifier = Modifier
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.CalendarToday,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = formatter.format(currentDate.toJavaLocalDate()),
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
                 IconButton(
                     onClick = onNext,
@@ -494,13 +514,24 @@ private fun CalendarTopBar(
         },
         actions = {
             FilledTonalButton(
-                onClick = onToday,
+                onClick = onDateClick,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 modifier = Modifier
                     .padding(end = 12.dp)
                     .heightIn(min = 40.dp)
             ) {
-                Text(text = stringResource(id = R.string.today))
+                Text(text = stringResource(id = R.string.action_pick_date))
+            }
+            AnimatedVisibility(visible = showTodayButton) {
+                FilledTonalButton(
+                    onClick = onToday,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier
+                        .padding(end = 12.dp)
+                        .heightIn(min = 40.dp)
+                ) {
+                    Text(text = stringResource(id = R.string.today))
+                }
             }
         },
         navigationIcon = {},
@@ -530,13 +561,21 @@ private fun SelectionTopBar(
             }
         },
         actions = {
-            IconButton(onClick = onToggleSelectAll, enabled = hasSelectableTasks) {
-                val (icon, description) = if (allSelected && selectedCount > 0) {
-                    Icons.Filled.ClearAll to stringResource(id = R.string.action_clear_selection)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Checkbox(
+                    checked = allSelected && selectedCount > 0,
+                    onCheckedChange = { onToggleSelectAll() },
+                    enabled = hasSelectableTasks
+                )
+                val label = if (allSelected && selectedCount > 0) {
+                    stringResource(id = R.string.action_clear_selection)
                 } else {
-                    Icons.Filled.SelectAll to stringResource(id = R.string.action_select_all)
+                    stringResource(id = R.string.action_select_all)
                 }
-                Icon(imageVector = icon, contentDescription = description)
+                Text(text = label)
             }
             if (selectedCount == 1) {
                 IconButton(onClick = onEdit, enabled = canEdit) {
@@ -850,7 +889,6 @@ private fun TaskCardContainer(
 ) {
     val border = when {
         isSelected -> BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-        !task.isDone && task.isImportant -> BorderStroke(2.dp, MaterialTheme.colorScheme.error)
         else -> baseBorder
     }
 
@@ -1202,7 +1240,8 @@ private fun WeekView(
                         AnimatedVisibility(
                             visible = isExpanded,
                             enter = expandVertically(animationSpec = tween(durationMillis = 250)) + fadeIn(),
-                            exit = shrinkVertically(animationSpec = tween(durationMillis = 250)) + fadeOut()
+                            exit = shrinkVertically(animationSpec = tween(durationMillis = 250)) + fadeOut(),
+                            modifier = Modifier.clipToBounds()
                         ) {
                             val timelineItems = remember(tasksForDay) {
                                 buildTimeline(tasksForDay).filterIsInstance<DayTimelineItem.TaskBlock>()
@@ -1263,6 +1302,7 @@ private fun MonthView(
             val isCurrentMonth = date.monthNumber == yearMonth.monthValue
             val tasksForDay = monthTasks[date].orEmpty()
             val hasImportant = tasksForDay.any { it.isImportant }
+            val hasTasks = tasksForDay.isNotEmpty()
             Surface(
                 onClick = { if (isCurrentMonth) onDayClick(date) },
                 shape = RoundedCornerShape(10.dp),
@@ -1293,21 +1333,14 @@ private fun MonthView(
                         modifier = Modifier.align(Alignment.Center)
                     )
                     ImportantDot(
-                        visible = hasImportant,
+                        visible = hasTasks,
                         modifier = Modifier.align(Alignment.TopEnd),
-                        color = Color(0xFFD32F2F)
+                        color = if (hasImportant) {
+                            Color(0xFFD32F2F)
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        }
                     )
-                    if (tasksForDay.isNotEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .align(Alignment.BottomCenter)
-                                .background(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    shape = CircleShape
-                                )
-                        )
-                    }
                 }
             }
         }
@@ -1361,6 +1394,15 @@ private fun TaskEditorScreen(
         )
     }
 
+    val currentRealTime by produceState(
+        initialValue = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).time
+    ) {
+        while (true) {
+            value = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).time
+            delay(30_000L)
+        }
+    }
+
     var startHour by rememberSaveable { mutableIntStateOf(initialStart.hour) }
     var startMinute by rememberSaveable { mutableIntStateOf(initialStart.minute) }
     var endHour by rememberSaveable { mutableIntStateOf(initialEndCandidate.hour) }
@@ -1397,6 +1439,19 @@ private fun TaskEditorScreen(
             val currentEnd = LocalTime(endHour, endMinute)
             if (currentEnd <= startTime) {
                 val adjusted = defaultEndFor(startTime)
+                endHour = adjusted.hour
+                endMinute = adjusted.minute
+            }
+        }
+    }
+
+    LaunchedEffect(selectedDate, type, endHour, endMinute, startTime, currentRealTime) {
+        if (type == TaskType.INTERVAL && selectedDate == today()) {
+            val nowLimit = currentRealTime
+            val currentEnd = LocalTime(endHour, endMinute)
+            if (currentEnd <= nowLimit) {
+                val base = if (startTime > nowLimit) startTime else nowLimit
+                val adjusted = defaultEndFor(base)
                 endHour = adjusted.hour
                 endMinute = adjusted.minute
             }
@@ -1519,7 +1574,9 @@ private fun TaskEditorScreen(
                     },
                     label = { Text(text = stringResource(id = R.string.field_title)) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
                 )
                 OutlinedTextField(
                     value = description,
@@ -1528,7 +1585,9 @@ private fun TaskEditorScreen(
                         if (saveError != null && saveError != scheduleError) saveError = null
                     },
                     label = { Text(text = stringResource(id = R.string.field_description)) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
                 )
                 Surface(
                     onClick = { isDatePickerVisible = true },
