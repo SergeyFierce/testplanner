@@ -45,6 +45,7 @@
     <string name="action_delete">Удалить</string>
     <string name="action_select_all">Выбрать все</string>
     <string name="action_clear_selection">Снять выделение</string>
+    <string name="action_pick_date">Дата</string>
     <string name="tasks_count">Задач: %1$d</string>
     <string name="expand_day_tasks">Показать задачи</string>
     <string name="collapse_day_tasks">Скрыть задачи</string>
