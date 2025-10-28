@@ -1296,6 +1296,7 @@ private fun MonthView(
             val tasksForDay = monthTasks[date].orEmpty()
             val hasImportant = tasksForDay.any { it.isImportant }
             val hasTasks = tasksForDay.isNotEmpty()
+            val allTasksDone = hasTasks && tasksForDay.all { it.isDone }
             Surface(
                 onClick = { if (isCurrentMonth) onDayClick(date) },
                 shape = RoundedCornerShape(10.dp),
@@ -1328,10 +1329,10 @@ private fun MonthView(
                     ImportantDot(
                         visible = hasTasks,
                         modifier = Modifier.align(Alignment.TopEnd),
-                        color = if (hasImportant) {
-                            Color(0xFFD32F2F)
-                        } else {
-                            MaterialTheme.colorScheme.primary
+                        color = when {
+                            allTasksDone -> TaskDoneGreen
+                            hasImportant -> Color(0xFFD32F2F)
+                            else -> MaterialTheme.colorScheme.primary
                         }
                     )
                 }

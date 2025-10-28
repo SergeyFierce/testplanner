@@ -35,7 +35,6 @@ import com.sergeyfierce.testplanner.ui.calendar.CalendarScreen
 import com.sergeyfierce.testplanner.ui.calendar.CalendarViewModel
 import com.sergeyfierce.testplanner.ui.calendar.CalendarViewModelFactory
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 
 private enum class PlannerDestination(val route: String) {
     CALENDAR("calendar"),
@@ -50,6 +49,9 @@ fun PlannerApp(
 ) {
     val navController = rememberNavController()
     val items = listOf(PlannerDestination.CALENDAR, PlannerDestination.STATISTICS, PlannerDestination.SETTINGS)
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+
     Scaffold(
         bottomBar = {
             Box(
@@ -58,53 +60,22 @@ fun PlannerApp(
                     .padding(horizontal = 24.dp)
                     .padding(bottom = 24.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(28.dp),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 12.dp,
-                    color = MaterialTheme.colorScheme.surface,
+                PlannerNavigationBar(
+                    destinations = items,
+                    currentDestination = currentRoute,
+                    onDestinationSelected = { destination ->
+                        navController.navigate(destination.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                ) {
-                    NavigationBar(
-                        containerColor = Color.Transparent,
-                        modifier = Modifier.clip(RoundedCornerShape(28.dp))
-                    ) {
-                        val backStackEntry by navController.currentBackStackEntryAsState()
-                        val currentRoute = backStackEntry?.destination?.route
-                        items.forEach { destination ->
-                            NavigationBarItem(
-                                selected = currentRoute == destination.route,
-                                onClick = {
-                                    navController.navigate(destination.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                },
-                                icon = {
-                                    when (destination) {
-                                        PlannerDestination.CALENDAR -> Icon(imageVector = Icons.Outlined.CalendarMonth, contentDescription = null)
-                                        PlannerDestination.STATISTICS -> Icon(imageVector = Icons.Outlined.BarChart, contentDescription = null)
-                                        PlannerDestination.SETTINGS -> Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        text = when (destination) {
-                                            PlannerDestination.CALENDAR -> stringResource(R.string.nav_calendar)
-                                            PlannerDestination.STATISTICS -> stringResource(R.string.nav_statistics)
-                                            PlannerDestination.SETTINGS -> stringResource(R.string.nav_settings)
-                                        }
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
+                )
             }
         }
     ) { innerPadding ->
@@ -124,6 +95,50 @@ fun PlannerApp(
             }
             composable(PlannerDestination.SETTINGS.route) {
                 PlaceholderScreen(text = stringResource(id = R.string.settings_placeholder))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlannerNavigationBar(
+    destinations: List<PlannerDestination>,
+    currentDestination: String?,
+    onDestinationSelected: (PlannerDestination) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(28.dp),
+        tonalElevation = 0.dp,
+        shadowElevation = 12.dp,
+        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier
+    ) {
+        NavigationBar(
+            containerColor = Color.Transparent,
+            modifier = Modifier.clip(RoundedCornerShape(28.dp))
+        ) {
+            destinations.forEach { destination ->
+                NavigationBarItem(
+                    selected = currentDestination == destination.route,
+                    onClick = { onDestinationSelected(destination) },
+                    icon = {
+                        when (destination) {
+                            PlannerDestination.CALENDAR -> Icon(imageVector = Icons.Outlined.CalendarMonth, contentDescription = null)
+                            PlannerDestination.STATISTICS -> Icon(imageVector = Icons.Outlined.BarChart, contentDescription = null)
+                            PlannerDestination.SETTINGS -> Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
+                        }
+                    },
+                    label = {
+                        Text(
+                            text = when (destination) {
+                                PlannerDestination.CALENDAR -> stringResource(R.string.nav_calendar)
+                                PlannerDestination.STATISTICS -> stringResource(R.string.nav_statistics)
+                                PlannerDestination.SETTINGS -> stringResource(R.string.nav_settings)
+                            }
+                        )
+                    }
+                )
             }
         }
     }
