@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,13 +43,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PriorityHigh
-import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -153,9 +153,6 @@ fun CalendarScreen(
     val selectedTasks = remember(uiState.dayTasks, selectedTaskIds) {
         uiState.dayTasks.filter { selectedTaskIds.contains(it.id) }
     }
-    val availableTaskIds = remember(uiState.dayTasks) {
-        uiState.dayTasks.map { it.id }.toSet()
-    }
     val cannotEditMessage = stringResource(id = R.string.edit_completed_not_allowed)
 
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = uiState.currentDate.toEpochMillis())
@@ -206,13 +203,7 @@ fun CalendarScreen(
                     SelectionTopBar(
                         selectedCount = selectedTasks.size,
                         canEdit = canEditSelection,
-                        isAllSelected = availableTaskIds.isNotEmpty() && selectedTaskIds.containsAll(availableTaskIds),
                         onCancel = { selectedTaskIds = emptySet() },
-                        onSelectAll = {
-                            if (availableTaskIds.isNotEmpty()) {
-                                selectedTaskIds = availableTaskIds.toSet()
-                            }
-                        },
                         onEdit = {
                             selectedTasks.firstOrNull()?.let { task ->
                                 selectedTaskIds = emptySet()
@@ -421,7 +412,7 @@ private fun CalendarTopBar(
                     onClick = onPrevious,
                     modifier = Modifier.size(40.dp)
                 ) {
-                    Icon(imageVector = Icons.Filled.KeyboardArrowLeft, contentDescription = null)
+                    Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = null)
                 }
                 Surface(
                     onClick = onDateClick,
@@ -456,7 +447,7 @@ private fun CalendarTopBar(
                     onClick = onNext,
                     modifier = Modifier.size(40.dp)
                 ) {
-                    Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = null)
+                    Icon(imageVector = Icons.Filled.ArrowForward, contentDescription = null)
                 }
             }
         },
@@ -479,9 +470,7 @@ private fun CalendarTopBar(
 private fun SelectionTopBar(
     selectedCount: Int,
     canEdit: Boolean,
-    isAllSelected: Boolean,
     onCancel: () -> Unit,
-    onSelectAll: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -495,13 +484,8 @@ private fun SelectionTopBar(
             }
         },
         actions = {
-            IconButton(onClick = onSelectAll, enabled = !isAllSelected) {
-                Icon(imageVector = Icons.Filled.SelectAll, contentDescription = stringResource(id = R.string.action_select_all))
-            }
-            if (canEdit) {
-                IconButton(onClick = onEdit) {
-                    Icon(imageVector = Icons.Filled.Edit, contentDescription = stringResource(id = R.string.edit_task))
-                }
+            IconButton(onClick = onEdit, enabled = canEdit) {
+                Icon(imageVector = Icons.Filled.Edit, contentDescription = stringResource(id = R.string.edit_task))
             }
             IconButton(onClick = onDelete, enabled = selectedCount > 0) {
                 Icon(imageVector = Icons.Outlined.Delete, contentDescription = stringResource(id = R.string.action_delete))
@@ -839,30 +823,36 @@ private fun TaskHeaderRow(
             "${task.start.toTimeLabel()} - ${end.toTimeLabel()}"
         } ?: task.start.toTimeLabel()
     }
-    Column(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
             text = timeLabel,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.widthIn(min = 72.dp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(
-                text = task.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             subtitle?.let {
                 Text(
                     text = it,
@@ -874,15 +864,10 @@ private fun TaskHeaderRow(
             }
         }
         if (onToggle != null) {
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Checkbox(
-                    checked = task.isDone,
-                    onCheckedChange = { checked -> onToggle(task, checked) }
-                )
-            }
+            Checkbox(
+                checked = task.isDone,
+                onCheckedChange = { checked -> onToggle(task, checked) }
+            )
         }
     }
 }
@@ -1050,8 +1035,7 @@ private fun WeekView(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 96.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(days) { date ->
             val tasksForDay = weekTasks[date].orEmpty().sortedBy { it.start }
