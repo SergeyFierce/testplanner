@@ -269,10 +269,8 @@ fun CalendarScreen(
                     } else {
                         CalendarTopBar(
                             currentDate = uiState.currentDate,
-                            showTodayButton = showTodayButton,
                             onPrevious = viewModel::goToPrevious,
                             onNext = viewModel::goToNext,
-                            onToday = viewModel::goToToday,
                             onDateClick = { isDatePickerVisible = true }
                         )
                     }
@@ -298,6 +296,22 @@ fun CalendarScreen(
                     .padding(horizontal = 16.dp)
                     .fillMaxSize()
             ) {
+                Spacer(modifier = Modifier.height(16.dp))
+                AnimatedVisibility(visible = showTodayButton) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        FilledTonalButton(
+                            onClick = viewModel::goToToday,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier.heightIn(min = 40.dp)
+                        ) {
+                            Text(text = stringResource(id = R.string.go_to_today))
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                }
                 CalendarModeSelector(
                     selectedMode = uiState.selectedMode,
                     onModeSelected = viewModel::onModeSelected
@@ -469,10 +483,8 @@ fun CalendarScreen(
 @Composable
 private fun CalendarTopBar(
     currentDate: LocalDate,
-    showTodayButton: Boolean,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onToday: () -> Unit,
     onDateClick: () -> Unit
 ) {
     val formatter = remember { DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.getDefault()) }
@@ -515,17 +527,6 @@ private fun CalendarTopBar(
                         modifier = Modifier.size(36.dp)
                     ) {
                         Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = null)
-                    }
-                }
-                AnimatedVisibility(visible = showTodayButton) {
-                    FilledTonalButton(
-                        onClick = onToday,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        modifier = Modifier
-                            .padding(top = 8.dp)
-                            .heightIn(min = 40.dp)
-                    ) {
-                        Text(text = stringResource(id = R.string.go_to_today))
                     }
                 }
             }
