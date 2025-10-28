@@ -105,6 +105,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -480,7 +481,11 @@ private fun CalendarTopBar(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Start
+                horizontalArrangement = if (showTodayButton) {
+                    Arrangement.Start
+                } else {
+                    Arrangement.Center
+                }
             ) {
                 IconButton(
                     onClick = onPrevious,
@@ -511,7 +516,9 @@ private fun CalendarTopBar(
                 ) {
                     Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = null)
                 }
-                Spacer(modifier = Modifier.weight(1f))
+                if (showTodayButton) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         },
         actions = {
@@ -726,11 +733,13 @@ private fun FreeTimeCard(
     freeTime: DayTimelineItem.FreeTime,
     onAddTask: (LocalTime) -> Unit
 ) {
+    val shape = RoundedCornerShape(16.dp)
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = shape,
         tonalElevation = 2.dp,
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
             .clickable { onAddTask(freeTime.start) }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -909,6 +918,7 @@ private fun TaskCardContainer(
         border = border,
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
             .animateContentSize(animationSpec = tween(durationMillis = 250))
             .combinedClickable(
                 onClick = onClick,
