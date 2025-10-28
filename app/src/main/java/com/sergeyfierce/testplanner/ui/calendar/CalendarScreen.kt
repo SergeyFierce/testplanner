@@ -71,7 +71,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -342,7 +341,7 @@ private fun CalendarTopBar(
             }
         },
         navigationIcon = {},
-        windowInsets = TopAppBarDefaults.windowInsets
+        windowInsets = WindowInsets(0, 0, 0, 0)
     )
 }
 
