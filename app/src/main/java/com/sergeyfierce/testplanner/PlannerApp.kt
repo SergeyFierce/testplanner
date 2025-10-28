@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -49,48 +51,57 @@ fun PlannerApp(
     val items = listOf(PlannerDestination.CALENDAR, PlannerDestination.STATISTICS, PlannerDestination.SETTINGS)
     Scaffold(
         bottomBar = {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                tonalElevation = 6.dp,
+            Box(
                 modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
                     .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 24.dp)
             ) {
-                NavigationBar(
-                    containerColor = Color.Transparent,
-                    modifier = Modifier.clip(RoundedCornerShape(24.dp))
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 12.dp,
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
                 ) {
-                    val backStackEntry by navController.currentBackStackEntryAsState()
-                    val currentRoute = backStackEntry?.destination?.route
-                    items.forEach { destination ->
-                        NavigationBarItem(
-                            selected = currentRoute == destination.route,
-                            onClick = {
-                                navController.navigate(destination.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                    NavigationBar(
+                        containerColor = Color.Transparent,
+                        modifier = Modifier.clip(RoundedCornerShape(28.dp))
+                    ) {
+                        val backStackEntry by navController.currentBackStackEntryAsState()
+                        val currentRoute = backStackEntry?.destination?.route
+                        items.forEach { destination ->
+                            NavigationBarItem(
+                                selected = currentRoute == destination.route,
+                                onClick = {
+                                    navController.navigate(destination.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = {
-                                when (destination) {
-                                    PlannerDestination.CALENDAR -> Icon(imageVector = Icons.Outlined.CalendarMonth, contentDescription = null)
-                                    PlannerDestination.STATISTICS -> Icon(imageVector = Icons.Outlined.BarChart, contentDescription = null)
-                                    PlannerDestination.SETTINGS -> Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
-                                }
-                            },
-                            label = {
-                                Text(
-                                    text = when (destination) {
-                                        PlannerDestination.CALENDAR -> stringResource(R.string.nav_calendar)
-                                        PlannerDestination.STATISTICS -> stringResource(R.string.nav_statistics)
-                                        PlannerDestination.SETTINGS -> stringResource(R.string.nav_settings)
+                                },
+                                icon = {
+                                    when (destination) {
+                                        PlannerDestination.CALENDAR -> Icon(imageVector = Icons.Outlined.CalendarMonth, contentDescription = null)
+                                        PlannerDestination.STATISTICS -> Icon(imageVector = Icons.Outlined.BarChart, contentDescription = null)
+                                        PlannerDestination.SETTINGS -> Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
                                     }
-                                )
-                            }
-                        )
+                                },
+                                label = {
+                                    Text(
+                                        text = when (destination) {
+                                            PlannerDestination.CALENDAR -> stringResource(R.string.nav_calendar)
+                                            PlannerDestination.STATISTICS -> stringResource(R.string.nav_statistics)
+                                            PlannerDestination.SETTINGS -> stringResource(R.string.nav_settings)
+                                        }
+                                    )
+                                }
+                            )
+                        }
                     }
                 }
             }
