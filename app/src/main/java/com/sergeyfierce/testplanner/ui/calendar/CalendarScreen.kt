@@ -23,12 +23,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.lazy.LazyColumn
@@ -52,8 +51,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -110,6 +107,7 @@ import com.sergeyfierce.testplanner.domain.model.CalendarMode
 import com.sergeyfierce.testplanner.domain.model.Task
 import com.sergeyfierce.testplanner.domain.model.TaskType
 import com.sergeyfierce.testplanner.ui.theme.TaskDoneGreen
+import com.sergeyfierce.testplanner.ui.theme.TaskDoneNestedGreen
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -407,24 +405,27 @@ private fun CalendarTopBar(
         title = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                IconButton(onClick = onPrevious) {
+                IconButton(
+                    onClick = onPrevious,
+                    modifier = Modifier.size(40.dp)
+                ) {
                     Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = null)
                 }
-                Spacer(modifier = Modifier.width(8.dp))
                 Surface(
                     onClick = onDateClick,
                     shape = RoundedCornerShape(24.dp),
                     tonalElevation = 2.dp,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier
-                        .widthIn(min = 140.dp, max = 240.dp)
+                        .weight(1f)
                         .padding(vertical = 4.dp)
                 ) {
                     Row(
                         modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -435,21 +436,27 @@ private fun CalendarTopBar(
                         )
                         Text(
                             text = formatter.format(currentDate.toJavaLocalDate()),
-                            modifier = Modifier.widthIn(max = 160.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Center,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = onNext) {
+                IconButton(
+                    onClick = onNext,
+                    modifier = Modifier.size(40.dp)
+                ) {
                     Icon(imageVector = Icons.Filled.ArrowForward, contentDescription = null)
                 }
             }
         },
         actions = {
-            FilledTonalButton(onClick = onToday) {
+            FilledTonalButton(
+                onClick = onToday,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.heightIn(min = 40.dp)
+            ) {
                 Text(text = stringResource(id = R.string.today))
             }
         },
@@ -555,7 +562,7 @@ private fun DayTimeline(
         buildTimeline(sortedTasks)
     }
 
-    LaunchedEffect(isToday, timelineItems) {
+    LaunchedEffect(isToday) {
         if (isToday) {
             val currentHour = Clock.System.now()
                 .toLocalDateTime(TimeZone.currentSystemDefault()).time.hour
@@ -569,7 +576,8 @@ private fun DayTimeline(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 96.dp)
     ) {
         items(
             items = timelineItems,
@@ -810,28 +818,25 @@ private fun TaskHeaderRow(
     onToggle: ((Task, Boolean) -> Unit)?,
     subtitle: String? = null
 ) {
+    val timeLabel = remember(task.start, task.end) {
+        task.end?.let { end ->
+            "${task.start.toTimeLabel()} - ${end.toTimeLabel()}"
+        } ?: task.start.toTimeLabel()
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier.widthIn(min = 48.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = task.start.toTimeLabel(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            task.end?.let { end ->
-                Text(
-                    text = end.toTimeLabel(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        Text(
+            text = timeLabel,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(min = 72.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -847,13 +852,6 @@ private fun TaskHeaderRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (task.isImportant && !task.isDone) {
-                    Icon(
-                        imageVector = Icons.Filled.PriorityHigh,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
             }
             subtitle?.let {
                 Text(
@@ -976,7 +974,7 @@ private fun NestedPointTaskCard(
 ) {
     val checkboxHandler = if (showCheckbox) onToggle else null
     val (containerColor, contentColor, baseBorder) = when {
-        task.isDone -> Triple(TaskDoneGreen, Color.White, null)
+        task.isDone -> Triple(TaskDoneNestedGreen, Color.White, null)
         task.isImportant -> Triple(
             MaterialTheme.colorScheme.errorContainer,
             MaterialTheme.colorScheme.onErrorContainer,
@@ -1175,19 +1173,12 @@ private fun MonthView(
                         color = Color(0xFFD32F2F)
                     )
                     if (tasksForDay.isNotEmpty()) {
-                        BadgedBox(
-                            badge = { Badge { Text(text = tasksForDay.size.toString()) } },
-                            modifier = Modifier.align(Alignment.BottomEnd)
-                        ) {
-                            Spacer(modifier = Modifier.height(0.dp))
-                        }
-                    } else if (isCurrentMonth) {
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
                                 .align(Alignment.BottomCenter)
                                 .background(
-                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                    color = MaterialTheme.colorScheme.primary,
                                     shape = CircleShape
                                 )
                         )
@@ -1768,9 +1759,9 @@ private fun defaultEndFor(start: LocalTime): LocalTime {
 }
 
 private fun LocalDate.toEpochMillis(): Long =
-    this.atStartOfDayIn(TimeZone.currentSystemDefault()).toEpochMilliseconds()
+    this.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds()
 
 private fun Long.toLocalDate(): LocalDate =
     Instant.fromEpochMilliseconds(this)
-        .toLocalDateTime(TimeZone.currentSystemDefault())
+        .toLocalDateTime(TimeZone.UTC)
         .date
