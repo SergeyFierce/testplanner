@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
@@ -407,27 +406,25 @@ private fun CalendarTopBar(
     TopAppBar(
         title = {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = onPrevious,
-                    modifier = Modifier.size(40.dp)
-                ) {
+                IconButton(onClick = onPrevious) {
                     Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = null)
                 }
+                Spacer(modifier = Modifier.width(8.dp))
                 Surface(
                     onClick = onDateClick,
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(24.dp),
                     tonalElevation = 2.dp,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier
-                        .widthIn(min = 140.dp, max = 220.dp)
-                        .heightIn(min = 40.dp)
+                        .widthIn(min = 140.dp, max = 240.dp)
+                        .padding(vertical = 4.dp)
                 ) {
                     Row(
                         modifier = Modifier
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -445,20 +442,14 @@ private fun CalendarTopBar(
                         )
                     }
                 }
-                IconButton(
-                    onClick = onNext,
-                    modifier = Modifier.size(40.dp)
-                ) {
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(onClick = onNext) {
                     Icon(imageVector = Icons.Filled.ArrowForward, contentDescription = null)
                 }
             }
         },
         actions = {
-            FilledTonalButton(
-                onClick = onToday,
-                modifier = Modifier.heightIn(min = 40.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-            ) {
+            FilledTonalButton(onClick = onToday) {
                 Text(text = stringResource(id = R.string.today))
             }
         },
@@ -563,29 +554,22 @@ private fun DayTimeline(
     val timelineItems = remember(sortedTasks) {
         buildTimeline(sortedTasks)
     }
-    var hasAutoScrolled by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isToday) {
-        hasAutoScrolled = false
-    }
 
     LaunchedEffect(isToday, timelineItems) {
-        if (isToday && !hasAutoScrolled) {
+        if (isToday) {
             val currentHour = Clock.System.now()
                 .toLocalDateTime(TimeZone.currentSystemDefault()).time.hour
             val index = timelineItems.indexOfFirst { item ->
                 item is DayTimelineItem.TaskBlock && item.task.start.hour >= currentHour
             }.takeIf { it >= 0 } ?: 0
             listState.scrollToItem(index)
-            hasAutoScrolled = true
         }
     }
 
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 96.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(
             items = timelineItems,
@@ -793,7 +777,6 @@ private fun TaskCardContainer(
     val border = when {
         isSelected -> BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
         !task.isDone && task.isImportant -> BorderStroke(2.dp, MaterialTheme.colorScheme.error)
-        task.isDone -> BorderStroke(1.dp, Color.White.copy(alpha = 0.6f))
         else -> baseBorder
     }
 
@@ -814,7 +797,7 @@ private fun TaskCardContainer(
             modifier = Modifier
                 .padding(contentPadding)
                 .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             content()
         }
@@ -827,40 +810,51 @@ private fun TaskHeaderRow(
     onToggle: ((Task, Boolean) -> Unit)?,
     subtitle: String? = null
 ) {
-    Column(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.widthIn(min = 48.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = timeRangeLabel(task),
+                text = task.start.toTimeLabel(),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(modifier = Modifier.weight(1f))
-            if (onToggle != null) {
-                Checkbox(
-                    checked = task.isDone,
-                    onCheckedChange = { checked -> onToggle(task, checked) }
+            task.end?.let { end ->
+                Text(
+                    text = end.toTimeLabel(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 12.dp),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(
-                text = task.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (task.isImportant && !task.isDone) {
+                    Icon(
+                        imageVector = Icons.Filled.PriorityHigh,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
             subtitle?.let {
                 Text(
                     text = it,
@@ -870,6 +864,12 @@ private fun TaskHeaderRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+        }
+        if (onToggle != null) {
+            Checkbox(
+                checked = task.isDone,
+                onCheckedChange = { checked -> onToggle(task, checked) }
+            )
         }
     }
 }
@@ -915,15 +915,11 @@ private fun IntervalTaskCard(
         if (!task.description.isNullOrBlank()) {
             Text(
                 text = task.description!!,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(start = 12.dp)
+                style = MaterialTheme.typography.bodyMedium
             )
         }
         if (nestedPoints.isNotEmpty()) {
-            Column(
-                modifier = Modifier.padding(start = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 nestedPoints.forEach { nested ->
                     NestedPointTaskCard(
                         task = nested,
@@ -963,8 +959,7 @@ private fun PointTaskCard(
         if (!task.description.isNullOrBlank()) {
             Text(
                 text = task.description!!,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(start = 12.dp)
+                style = MaterialTheme.typography.bodyMedium
             )
         }
     }
@@ -1008,11 +1003,7 @@ private fun NestedPointTaskCard(
     ) {
         TaskHeaderRow(task = task, onToggle = checkboxHandler)
         task.description?.takeIf { it.isNotBlank() }?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(start = 12.dp)
-            )
+            Text(text = it, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -1190,6 +1181,16 @@ private fun MonthView(
                         ) {
                             Spacer(modifier = Modifier.height(0.dp))
                         }
+                    } else if (isCurrentMonth) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .align(Alignment.BottomCenter)
+                                .background(
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                    shape = CircleShape
+                                )
+                        )
                     }
                 }
             }
@@ -1767,7 +1768,7 @@ private fun defaultEndFor(start: LocalTime): LocalTime {
 }
 
 private fun LocalDate.toEpochMillis(): Long =
-    this.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds()
+    this.atStartOfDayIn(TimeZone.currentSystemDefault()).toEpochMilliseconds()
 
 private fun Long.toLocalDate(): LocalDate =
     Instant.fromEpochMilliseconds(this)
