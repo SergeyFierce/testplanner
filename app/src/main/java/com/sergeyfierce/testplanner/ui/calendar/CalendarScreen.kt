@@ -513,14 +513,27 @@ private fun CalendarTopBar(
             }
         },
         actions = {
-            FilledTonalButton(
+            val formattedDate = remember(currentDate) {
+                formatter.format(currentDate.toJavaLocalDate())
+            }
+            Surface(
                 onClick = onDateClick,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(20.dp),
+                tonalElevation = 0.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .padding(end = 12.dp)
                     .heightIn(min = 40.dp)
             ) {
-                Text(text = stringResource(id = R.string.action_pick_date))
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(imageVector = Icons.Filled.CalendarToday, contentDescription = null)
+                    Text(text = formattedDate)
+                }
             }
             AnimatedVisibility(visible = showTodayButton) {
                 FilledTonalButton(
@@ -1434,6 +1447,12 @@ private fun TaskEditorScreen(
         }
     }
 
+    LaunchedEffect(hasChanges) {
+        if (!hasChanges) {
+            showDiscardDialog = false
+        }
+    }
+
     LaunchedEffect(startTime, type) {
         if (type == TaskType.INTERVAL) {
             val currentEnd = LocalTime(endHour, endMinute)
@@ -1700,29 +1719,28 @@ private fun TaskEditorScreen(
             title = { Text(text = stringResource(id = R.string.unsaved_changes_title)) },
             text = { Text(text = stringResource(id = R.string.unsaved_changes_message)) },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDiscardDialog = false
-                        handleSave()
-                    },
-                    enabled = scheduleError == null && title.isNotBlank()
-                ) {
-                    Text(text = stringResource(id = R.string.save))
-                }
-            },
-            dismissButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { showDiscardDialog = false }) {
+                        Text(text = stringResource(android.R.string.cancel))
+                    }
                     TextButton(onClick = {
                         showDiscardDialog = false
                         onDismiss()
                     }) {
                         Text(text = stringResource(id = R.string.action_discard))
                     }
-                    TextButton(onClick = { showDiscardDialog = false }) {
-                        Text(text = stringResource(android.R.string.cancel))
+                    TextButton(
+                        onClick = {
+                            showDiscardDialog = false
+                            handleSave()
+                        },
+                        enabled = scheduleError == null && title.isNotBlank()
+                    ) {
+                        Text(text = stringResource(id = R.string.save))
                     }
                 }
-            }
+            },
+            dismissButton = {}
         )
     }
 }
