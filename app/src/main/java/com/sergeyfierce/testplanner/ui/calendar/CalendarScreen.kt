@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -216,6 +217,7 @@ fun CalendarScreen(
         }
     }
 }
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CalendarTopBar(
     currentDate: LocalDate,
@@ -246,6 +248,7 @@ private fun CalendarTopBar(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CalendarModeSelector(
     selectedMode: CalendarMode,
@@ -747,6 +750,7 @@ private fun MonthView(
         }
     }
 }
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TaskEditorScreen(
     initialTask: Task?,
@@ -935,6 +939,7 @@ private fun TaskEditorScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TypeSelector(selected: TaskType, onSelect: (TaskType) -> Unit) {
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
