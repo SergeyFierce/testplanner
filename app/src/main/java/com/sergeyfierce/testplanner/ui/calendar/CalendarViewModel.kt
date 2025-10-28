@@ -149,7 +149,6 @@ class CalendarViewModel(
     }
 
     fun createTask(
-        parentId: String?,
         title: String,
         description: String?,
         date: LocalDate,
@@ -160,7 +159,7 @@ class CalendarViewModel(
     ) {
         viewModelScope.launch {
             runCatching {
-                repository.createTask(parentId, title, description, date, type, start, end, isImportant)
+                repository.createTask(title, description, date, type, start, end, isImportant)
             }
         }
     }

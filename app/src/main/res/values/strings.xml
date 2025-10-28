@@ -5,9 +5,11 @@
     <string name="mode_week">Неделя</string>
     <string name="mode_month">Месяц</string>
     <string name="free_time_title">Свободное время</string>
+    <string name="free_day_title">Свободный день</string>
     <string name="free_time_range">%1$s — %2$s</string>
     <string name="free_time_until_end">до конца дня</string>
     <string name="free_time_add">Добавить задачу</string>
+    <string name="free_day_message">Весь день свободен</string>
     <string name="more_tasks">Ещё %1$d…</string>
     <string name="new_task">Новая задача</string>
     <string name="edit_task">Редактирование задачи</string>
@@ -24,9 +26,6 @@
     <string name="error_end_required">Интервал требует окончания</string>
     <string name="error_title_required">Название обязательно</string>
     <string name="error_date_required">Укажите дату в формате ГГГГ-ММ-ДД</string>
-    <string name="auto_parent_hint">Родительская активность определяется автоматически по выбранному времени.</string>
-    <string name="auto_parent_label">Родитель: %1$s</string>
-    <string name="auto_parent_none">Без родителя</string>
     <string name="nav_calendar">Календарь</string>
     <string name="nav_statistics">Статистика</string>
     <string name="nav_settings">Настройки</string>
