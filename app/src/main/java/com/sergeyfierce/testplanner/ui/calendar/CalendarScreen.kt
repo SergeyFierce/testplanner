@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -488,6 +489,7 @@ private fun CalendarTopBar(
                     Icon(imageVector = Icons.Filled.KeyboardArrowLeft, contentDescription = null)
                 }
                 Surface(
+                    onClick = onDateClick,
                     shape = RoundedCornerShape(24.dp),
                     tonalElevation = 2.dp,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -513,15 +515,6 @@ private fun CalendarTopBar(
             }
         },
         actions = {
-            FilledTonalButton(
-                onClick = onDateClick,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                modifier = Modifier
-                    .padding(end = 12.dp)
-                    .heightIn(min = 40.dp)
-            ) {
-                Text(text = stringResource(id = R.string.action_pick_date))
-            }
             AnimatedVisibility(visible = showTodayButton) {
                 FilledTonalButton(
                     onClick = onToday,
@@ -1695,35 +1688,41 @@ private fun TaskEditorScreen(
     }
 
     if (showDiscardDialog) {
-        AlertDialog(
-            onDismissRequest = { showDiscardDialog = false },
-            title = { Text(text = stringResource(id = R.string.unsaved_changes_title)) },
-            text = { Text(text = stringResource(id = R.string.unsaved_changes_message)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDiscardDialog = false
-                        handleSave()
-                    },
-                    enabled = scheduleError == null && title.isNotBlank()
-                ) {
-                    Text(text = stringResource(id = R.string.save))
-                }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = {
-                        showDiscardDialog = false
-                        onDismiss()
-                    }) {
-                        Text(text = stringResource(id = R.string.action_discard))
+        if (!hasChanges) {
+            showDiscardDialog = false
+        } else {
+            AlertDialog(
+                onDismissRequest = { showDiscardDialog = false },
+                title = { Text(text = stringResource(id = R.string.unsaved_changes_title)) },
+                text = { Text(text = stringResource(id = R.string.unsaved_changes_message)) },
+                confirmButton = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, alignment = Alignment.End)
+                    ) {
+                        TextButton(onClick = { showDiscardDialog = false }) {
+                            Text(text = stringResource(android.R.string.cancel))
+                        }
+                        TextButton(onClick = {
+                            showDiscardDialog = false
+                            onDismiss()
+                        }) {
+                            Text(text = stringResource(id = R.string.action_discard))
+                        }
+                        TextButton(
+                            onClick = {
+                                showDiscardDialog = false
+                                handleSave()
+                            },
+                            enabled = scheduleError == null && title.isNotBlank()
+                        ) {
+                            Text(text = stringResource(id = R.string.save))
+                        }
                     }
-                    TextButton(onClick = { showDiscardDialog = false }) {
-                        Text(text = stringResource(android.R.string.cancel))
-                    }
-                }
-            }
-        )
+                },
+                modifier = Modifier.widthIn(min = 360.dp)
+            )
+        }
     }
 }
 
