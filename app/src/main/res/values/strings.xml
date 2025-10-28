@@ -1,3 +1,32 @@
 <resources>
-    <string name="app_name">testplanner</string>
+    <string name="app_name">Testplanner</string>
+    <string name="today">Сегодня</string>
+    <string name="mode_day">День</string>
+    <string name="mode_week">Неделя</string>
+    <string name="mode_month">Месяц</string>
+    <string name="empty_slot_hint">Свободное время — нажмите, чтобы добавить задачу</string>
+    <string name="more_tasks">Ещё %1$d…</string>
+    <string name="new_task">Новая задача</string>
+    <string name="edit_task">Редактирование задачи</string>
+    <string name="save">Сохранить</string>
+    <string name="cancel">Отмена</string>
+    <string name="field_title">Название</string>
+    <string name="field_description">Описание</string>
+    <string name="field_start">Начало</string>
+    <string name="field_end">Окончание</string>
+    <string name="field_date">Дата</string>
+    <string name="field_important">Важная задача</string>
+    <string name="field_parent">Родительская активность</string>
+    <string name="no_parent">Без родителя</string>
+    <string name="type_point">Точка</string>
+    <string name="type_interval">Интервал</string>
+    <string name="error_time_required">Укажите время начала в формате ЧЧ:ММ</string>
+    <string name="error_end_required">Интервал требует окончания</string>
+    <string name="error_title_required">Название обязательно</string>
+    <string name="error_date_required">Укажите дату в формате ГГГГ-ММ-ДД</string>
+    <string name="nav_calendar">Календарь</string>
+    <string name="nav_statistics">Статистика</string>
+    <string name="nav_settings">Настройки</string>
+    <string name="statistics_placeholder">Раздел в разработке. В будущем здесь появится аналитика и графики выполнения дня.</string>
+    <string name="settings_placeholder">Раздел в разработке. Здесь можно будет изменить тему, уведомления и параметры интерфейса.</string>
 </resources>
