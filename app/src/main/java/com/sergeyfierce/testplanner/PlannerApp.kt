@@ -50,55 +50,48 @@ fun PlannerApp(
     val items = listOf(PlannerDestination.CALENDAR, PlannerDestination.STATISTICS, PlannerDestination.SETTINGS)
     Scaffold(
         bottomBar = {
-            Box(
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                tonalElevation = 6.dp,
                 modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, bottom = 24.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(24.dp),
-                    tonalElevation = 8.dp,
-                    shadowElevation = 12.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
+                NavigationBar(
+                    containerColor = Color.Transparent,
+                    modifier = Modifier.clip(RoundedCornerShape(24.dp))
                 ) {
-                    NavigationBar(
-                        containerColor = Color.Transparent,
-                        tonalElevation = 0.dp,
-                        modifier = Modifier.clip(RoundedCornerShape(24.dp))
-                    ) {
-                        val backStackEntry by navController.currentBackStackEntryAsState()
-                        val currentRoute = backStackEntry?.destination?.route
-                        items.forEach { destination ->
-                            NavigationBarItem(
-                                selected = currentRoute == destination.route,
-                                onClick = {
-                                    navController.navigate(destination.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
+                    val backStackEntry by navController.currentBackStackEntryAsState()
+                    val currentRoute = backStackEntry?.destination?.route
+                    items.forEach { destination ->
+                        NavigationBarItem(
+                            selected = currentRoute == destination.route,
+                            onClick = {
+                                navController.navigate(destination.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
                                     }
-                                },
-                                icon = {
-                                    when (destination) {
-                                        PlannerDestination.CALENDAR -> Icon(imageVector = Icons.Outlined.CalendarMonth, contentDescription = null)
-                                        PlannerDestination.STATISTICS -> Icon(imageVector = Icons.Outlined.BarChart, contentDescription = null)
-                                        PlannerDestination.SETTINGS -> Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        text = when (destination) {
-                                            PlannerDestination.CALENDAR -> stringResource(R.string.nav_calendar)
-                                            PlannerDestination.STATISTICS -> stringResource(R.string.nav_statistics)
-                                            PlannerDestination.SETTINGS -> stringResource(R.string.nav_settings)
-                                        }
-                                    )
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                            )
-                        }
+                            },
+                            icon = {
+                                when (destination) {
+                                    PlannerDestination.CALENDAR -> Icon(imageVector = Icons.Outlined.CalendarMonth, contentDescription = null)
+                                    PlannerDestination.STATISTICS -> Icon(imageVector = Icons.Outlined.BarChart, contentDescription = null)
+                                    PlannerDestination.SETTINGS -> Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
+                                }
+                            },
+                            label = {
+                                Text(
+                                    text = when (destination) {
+                                        PlannerDestination.CALENDAR -> stringResource(R.string.nav_calendar)
+                                        PlannerDestination.STATISTICS -> stringResource(R.string.nav_statistics)
+                                        PlannerDestination.SETTINGS -> stringResource(R.string.nav_settings)
+                                    }
+                                )
+                            }
+                        )
                     }
                 }
             }
