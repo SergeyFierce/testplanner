@@ -3,20 +3,26 @@ package com.sergeyfierce.testplanner.ui.calendar
 import android.widget.EditText
 import android.widget.NumberPicker
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,6 +45,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.animateContentSize
 import androidx.compose.material.icons.Icons
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Add
@@ -46,8 +53,12 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ClearAll
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
@@ -91,6 +102,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -145,11 +157,12 @@ fun CalendarScreen(
     var editorDefaultStart by remember { mutableStateOf<LocalTime?>(null) }
     var editorInitialType by remember { mutableStateOf(TaskType.POINT) }
     var selectedTaskIds by remember { mutableStateOf(setOf<String>()) }
+    var isSelectionModeActive by rememberSaveable { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     val isToday = uiState.currentDate == today()
-    val isSelectionMode = selectedTaskIds.isNotEmpty()
+    val isSelectionMode = isSelectionModeActive
     val selectedTasks = remember(uiState.dayTasks, selectedTaskIds) {
         uiState.dayTasks.filter { selectedTaskIds.contains(it.id) }
     }
@@ -182,6 +195,7 @@ fun CalendarScreen(
 
     BackHandler(enabled = isSelectionMode && !isEditorVisible) {
         selectedTaskIds = emptySet()
+        isSelectionModeActive = false
     }
 
     LaunchedEffect(uiState.dayTasks) {
@@ -190,12 +204,16 @@ fun CalendarScreen(
         if (filtered.size != selectedTaskIds.size) {
             selectedTaskIds = filtered
         }
+        if (availableIds.isEmpty()) {
+            isSelectionModeActive = false
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
         val canEditSelection = selectedTasks.size == 1 && selectedTasks.firstOrNull()?.isDone == false
         val allTaskIds = remember(uiState.dayTasks) { uiState.dayTasks.map { it.id } }
         val allSelected = allTaskIds.isNotEmpty() && selectedTaskIds.containsAll(allTaskIds)
+        val hasSelectableTasks = allTaskIds.isNotEmpty()
 
         Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -206,13 +224,23 @@ fun CalendarScreen(
                         selectedCount = selectedTasks.size,
                         canEdit = canEditSelection,
                         allSelected = allSelected,
+                        hasSelectableTasks = hasSelectableTasks,
                         onToggleSelectAll = {
-                            selectedTaskIds = if (allSelected) emptySet() else allTaskIds.toSet()
+                            if (allSelected) {
+                                selectedTaskIds = emptySet()
+                            } else {
+                                selectedTaskIds = allTaskIds.toSet()
+                                isSelectionModeActive = true
+                            }
                         },
-                        onCancel = { selectedTaskIds = emptySet() },
+                        onCancel = {
+                            selectedTaskIds = emptySet()
+                            isSelectionModeActive = false
+                        },
                         onEdit = {
                             selectedTasks.firstOrNull()?.let { task ->
                                 selectedTaskIds = emptySet()
+                                isSelectionModeActive = false
                                 openEditor(task)
                             }
                         },
@@ -232,6 +260,7 @@ fun CalendarScreen(
             floatingActionButton = {
                 FloatingActionButton(onClick = {
                     selectedTaskIds = emptySet()
+                    isSelectionModeActive = false
                     editingTask = null
                     editorDefaultStart = null
                     editorInitialType = TaskType.POINT
@@ -258,6 +287,9 @@ fun CalendarScreen(
                         updated.remove(task.id)
                     }
                     selectedTaskIds = updated
+                    if (updated.isNotEmpty()) {
+                        isSelectionModeActive = true
+                    }
                 }
 
                 fun handleTaskClick(task: Task) {
@@ -277,6 +309,7 @@ fun CalendarScreen(
                         toggleSelection(task)
                     } else {
                         selectedTaskIds = setOf(task.id)
+                        isSelectionModeActive = true
                     }
                 }
 
@@ -384,6 +417,7 @@ fun CalendarScreen(
                         }
                         showDeleteConfirmation = false
                         selectedTaskIds = emptySet()
+                        isSelectionModeActive = false
                     }) {
                         Text(text = stringResource(android.R.string.ok))
                     }
@@ -412,11 +446,11 @@ private fun CalendarTopBar(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.Start
             ) {
                 IconButton(
                     onClick = onPrevious,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(36.dp)
                 ) {
                     Icon(imageVector = Icons.Filled.KeyboardArrowLeft, contentDescription = null)
                 }
@@ -426,14 +460,13 @@ private fun CalendarTopBar(
                     tonalElevation = 2.dp,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier
-                        .weight(1f)
-                        .padding(vertical = 4.dp)
+                        .padding(vertical = 4.dp, horizontal = 4.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.CalendarToday,
@@ -451,17 +484,20 @@ private fun CalendarTopBar(
                 }
                 IconButton(
                     onClick = onNext,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(36.dp)
                 ) {
                     Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = null)
                 }
+                Spacer(modifier = Modifier.weight(1f))
             }
         },
         actions = {
             FilledTonalButton(
                 onClick = onToday,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                modifier = Modifier.heightIn(min = 40.dp)
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .heightIn(min = 40.dp)
             ) {
                 Text(text = stringResource(id = R.string.today))
             }
@@ -477,6 +513,7 @@ private fun SelectionTopBar(
     selectedCount: Int,
     canEdit: Boolean,
     allSelected: Boolean,
+    hasSelectableTasks: Boolean,
     onToggleSelectAll: () -> Unit,
     onCancel: () -> Unit,
     onEdit: () -> Unit,
@@ -492,22 +529,23 @@ private fun SelectionTopBar(
             }
         },
         actions = {
-            TextButton(onClick = onToggleSelectAll) {
-                Text(
-                    text = if (allSelected) {
-                        stringResource(id = R.string.action_clear_selection)
-                    } else {
-                        stringResource(id = R.string.action_select_all)
-                    }
-                )
+            IconButton(onClick = onToggleSelectAll, enabled = hasSelectableTasks) {
+                val (icon, description) = if (allSelected && selectedCount > 0) {
+                    Icons.Filled.ClearAll to stringResource(id = R.string.action_clear_selection)
+                } else {
+                    Icons.Filled.SelectAll to stringResource(id = R.string.action_select_all)
+                }
+                Icon(imageVector = icon, contentDescription = description)
             }
             if (selectedCount == 1) {
                 IconButton(onClick = onEdit, enabled = canEdit) {
                     Icon(imageVector = Icons.Filled.Edit, contentDescription = stringResource(id = R.string.edit_task))
                 }
             }
-            IconButton(onClick = onDelete, enabled = selectedCount > 0) {
-                Icon(imageVector = Icons.Outlined.Delete, contentDescription = stringResource(id = R.string.action_delete))
+            if (selectedCount > 0) {
+                IconButton(onClick = onDelete) {
+                    Icon(imageVector = Icons.Outlined.Delete, contentDescription = stringResource(id = R.string.action_delete))
+                }
             }
         },
         windowInsets = WindowInsets(0, 0, 0, 0)
@@ -563,6 +601,7 @@ private fun AnimatedCalendarContent(
         }
     }
 }
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DayTimeline(
     tasks: List<Task>,
@@ -607,34 +646,41 @@ private fun DayTimeline(
                 }
             }
         ) { item ->
+            val placementModifier = Modifier
+                .fillMaxWidth()
+                .animateItemPlacement(animationSpec = tween(durationMillis = 300))
             when (item) {
-                is DayTimelineItem.FreeTime -> FreeTimeCard(
-                    freeTime = item,
-                    onAddTask = onAddFromSlot
-                )
+                is DayTimelineItem.FreeTime -> Box(modifier = placementModifier) {
+                    FreeTimeCard(
+                        freeTime = item,
+                        onAddTask = onAddFromSlot
+                    )
+                }
                 is DayTimelineItem.TaskBlock -> {
-                    if (item.task.isInterval) {
-                        IntervalTaskCard(
-                            task = item.task,
-                            nestedPoints = item.nestedPoints,
-                            onToggle = onToggle,
-                            showCheckbox = onToggle != null,
-                            isSelected = selectedTaskIds.contains(item.task.id),
-                            selectedTaskIds = selectedTaskIds,
-                            onClick = { onTaskClick(item.task) },
-                            onLongPress = { onTaskLongPress(item.task) },
-                            onNestedClick = onTaskClick,
-                            onNestedLongPress = onTaskLongPress
-                        )
-                    } else {
-                        PointTaskCard(
-                            task = item.task,
-                            onToggle = onToggle,
-                            showCheckbox = onToggle != null,
-                            isSelected = selectedTaskIds.contains(item.task.id),
-                            onClick = { onTaskClick(item.task) },
-                            onLongPress = { onTaskLongPress(item.task) }
-                        )
+                    Box(modifier = placementModifier) {
+                        if (item.task.isInterval) {
+                            IntervalTaskCard(
+                                task = item.task,
+                                nestedPoints = item.nestedPoints,
+                                onToggle = onToggle,
+                                showCheckbox = onToggle != null,
+                                isSelected = selectedTaskIds.contains(item.task.id),
+                                selectedTaskIds = selectedTaskIds,
+                                onClick = { onTaskClick(item.task) },
+                                onLongPress = { onTaskLongPress(item.task) },
+                                onNestedClick = onTaskClick,
+                                onNestedLongPress = onTaskLongPress
+                            )
+                        } else {
+                            PointTaskCard(
+                                task = item.task,
+                                onToggle = onToggle,
+                                showCheckbox = onToggle != null,
+                                isSelected = selectedTaskIds.contains(item.task.id),
+                                onClick = { onTaskClick(item.task) },
+                                onLongPress = { onTaskLongPress(item.task) }
+                            )
+                        }
                     }
                 }
             }
@@ -807,14 +853,31 @@ private fun TaskCardContainer(
         else -> baseBorder
     }
 
+    val animatedContainerColor by animateColorAsState(
+        targetValue = containerColor,
+        animationSpec = tween(durationMillis = 250),
+        label = "containerColor"
+    )
+    val animatedContentColor by animateColorAsState(
+        targetValue = contentColor,
+        animationSpec = tween(durationMillis = 250),
+        label = "contentColor"
+    )
+    val animatedElevation by animateDpAsState(
+        targetValue = tonalElevation,
+        animationSpec = tween(durationMillis = 250),
+        label = "tonalElevation"
+    )
+
     Surface(
         shape = shape,
-        tonalElevation = tonalElevation,
-        color = containerColor,
-        contentColor = contentColor,
+        tonalElevation = animatedElevation,
+        color = animatedContainerColor,
+        contentColor = animatedContentColor,
         border = border,
         modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize(animationSpec = tween(durationMillis = 250))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongPress
@@ -842,13 +905,21 @@ private fun TaskHeaderRow(
             "${task.start.toTimeLabel()} - ${end.toTimeLabel()}"
         } ?: task.start.toTimeLabel()
     }
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (task.isDone) 0.6f else 1f,
+        animationSpec = tween(durationMillis = 200),
+        label = "taskAlpha"
+    )
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .alpha(contentAlpha),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
@@ -1054,6 +1125,7 @@ private fun WeekView(
             val tasksForDay = weekTasks[date].orEmpty().sortedBy { it.start }
             val isToday = date == today()
             val isSelected = date == currentDate
+            val hasTasks = tasksForDay.isNotEmpty()
             val dayContainerColor = when {
                 isSelected -> MaterialTheme.colorScheme.surface
                 isToday -> MaterialTheme.colorScheme.surface
@@ -1064,13 +1136,21 @@ private fun WeekView(
                 isToday -> BorderStroke(1.dp, MaterialTheme.colorScheme.secondary)
                 else -> null
             }
+            var isExpanded by rememberSaveable(date.toString()) { mutableStateOf(false) }
+            LaunchedEffect(hasTasks) {
+                if (!hasTasks) {
+                    isExpanded = false
+                }
+            }
             Surface(
                 onClick = { onDayClick(date) },
                 shape = RoundedCornerShape(16.dp),
                 color = dayContainerColor,
                 tonalElevation = if (isSelected || isToday) 4.dp else 1.dp,
                 border = dayBorder,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = tween(durationMillis = 250))
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -1079,47 +1159,78 @@ private fun WeekView(
                     val formatted = dateFormatter.format(date.toJavaLocalDate()).replaceFirstChar { char ->
                         if (char.isLowerCase()) char.titlecase(locale) else char.toString()
                     }
-                    Text(
-                        text = formatted,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (tasksForDay.isEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = formatted,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (hasTasks) {
+                            Text(
+                                text = stringResource(id = R.string.tasks_count, tasksForDay.size),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                            IconButton(
+                                onClick = { isExpanded = !isExpanded },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                val (icon, description) = if (isExpanded) {
+                                    Icons.Filled.ExpandLess to stringResource(id = R.string.collapse_day_tasks)
+                                } else {
+                                    Icons.Filled.ExpandMore to stringResource(id = R.string.expand_day_tasks)
+                                }
+                                Icon(imageVector = icon, contentDescription = description)
+                            }
+                        }
+                    }
+                    if (!hasTasks) {
                         Text(
                             text = stringResource(id = R.string.free_day_title),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        val timelineItems = remember(tasksForDay) {
-                            buildTimeline(tasksForDay).filterIsInstance<DayTimelineItem.TaskBlock>()
-                        }
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            timelineItems.forEach { item ->
-                                if (item.task.isInterval) {
-                                    IntervalTaskCard(
-                                        task = item.task,
-                                        nestedPoints = item.nestedPoints,
-                                        onToggle = null,
-                                        showCheckbox = false,
-                                        isSelected = false,
-                                        selectedTaskIds = emptySet(),
-                                        onClick = {},
-                                        onLongPress = {},
-                                        onNestedClick = {},
-                                        onNestedLongPress = {}
-                                    )
-                                } else {
-                                    PointTaskCard(
-                                        task = item.task,
-                                        onToggle = null,
-                                        showCheckbox = false,
-                                        isSelected = false,
-                                        onClick = {},
-                                        onLongPress = {}
-                                    )
+                        AnimatedVisibility(
+                            visible = isExpanded,
+                            enter = expandVertically(animationSpec = tween(durationMillis = 250)) + fadeIn(),
+                            exit = shrinkVertically(animationSpec = tween(durationMillis = 250)) + fadeOut()
+                        ) {
+                            val timelineItems = remember(tasksForDay) {
+                                buildTimeline(tasksForDay).filterIsInstance<DayTimelineItem.TaskBlock>()
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                timelineItems.forEach { item ->
+                                    if (item.task.isInterval) {
+                                        IntervalTaskCard(
+                                            task = item.task,
+                                            nestedPoints = item.nestedPoints,
+                                            onToggle = null,
+                                            showCheckbox = false,
+                                            isSelected = false,
+                                            selectedTaskIds = emptySet(),
+                                            onClick = {},
+                                            onLongPress = {},
+                                            onNestedClick = {},
+                                            onNestedLongPress = {}
+                                        )
+                                    } else {
+                                        PointTaskCard(
+                                            task = item.task,
+                                            onToggle = null,
+                                            showCheckbox = false,
+                                            isSelected = false,
+                                            onClick = {},
+                                            onLongPress = {}
+                                        )
+                                    }
                                 }
                             }
                         }
