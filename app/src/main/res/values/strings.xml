@@ -43,6 +43,8 @@
     <string name="selection_count">Выбрано: %1$d</string>
     <string name="action_cancel">Отменить</string>
     <string name="action_delete">Удалить</string>
+    <string name="action_select_all">Выбрать все</string>
+    <string name="action_clear_selection">Снять выделение</string>
     <string name="action_discard">Не сохранять</string>
     <string name="edit_completed_not_allowed">Выполненные задачи нельзя редактировать</string>
     <string name="unsaved_changes_title">Сохранить изменения?</string>

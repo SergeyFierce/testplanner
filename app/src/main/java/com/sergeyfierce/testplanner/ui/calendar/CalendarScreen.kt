@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -44,10 +43,11 @@ import androidx.compose.material.icons.Icons
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
@@ -194,6 +194,8 @@ fun CalendarScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         val canEditSelection = selectedTasks.size == 1 && selectedTasks.firstOrNull()?.isDone == false
+        val allTaskIds = remember(uiState.dayTasks) { uiState.dayTasks.map { it.id } }
+        val allSelected = allTaskIds.isNotEmpty() && selectedTaskIds.containsAll(allTaskIds)
 
         Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -203,6 +205,10 @@ fun CalendarScreen(
                     SelectionTopBar(
                         selectedCount = selectedTasks.size,
                         canEdit = canEditSelection,
+                        allSelected = allSelected,
+                        onToggleSelectAll = {
+                            selectedTaskIds = if (allSelected) emptySet() else allTaskIds.toSet()
+                        },
                         onCancel = { selectedTaskIds = emptySet() },
                         onEdit = {
                             selectedTasks.firstOrNull()?.let { task ->
@@ -412,7 +418,7 @@ private fun CalendarTopBar(
                     onClick = onPrevious,
                     modifier = Modifier.size(40.dp)
                 ) {
-                    Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = null)
+                    Icon(imageVector = Icons.Filled.KeyboardArrowLeft, contentDescription = null)
                 }
                 Surface(
                     onClick = onDateClick,
@@ -447,7 +453,7 @@ private fun CalendarTopBar(
                     onClick = onNext,
                     modifier = Modifier.size(40.dp)
                 ) {
-                    Icon(imageVector = Icons.Filled.ArrowForward, contentDescription = null)
+                    Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = null)
                 }
             }
         },
@@ -470,6 +476,8 @@ private fun CalendarTopBar(
 private fun SelectionTopBar(
     selectedCount: Int,
     canEdit: Boolean,
+    allSelected: Boolean,
+    onToggleSelectAll: () -> Unit,
     onCancel: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -484,8 +492,19 @@ private fun SelectionTopBar(
             }
         },
         actions = {
-            IconButton(onClick = onEdit, enabled = canEdit) {
-                Icon(imageVector = Icons.Filled.Edit, contentDescription = stringResource(id = R.string.edit_task))
+            TextButton(onClick = onToggleSelectAll) {
+                Text(
+                    text = if (allSelected) {
+                        stringResource(id = R.string.action_clear_selection)
+                    } else {
+                        stringResource(id = R.string.action_select_all)
+                    }
+                )
+            }
+            if (selectedCount == 1) {
+                IconButton(onClick = onEdit, enabled = canEdit) {
+                    Icon(imageVector = Icons.Filled.Edit, contentDescription = stringResource(id = R.string.edit_task))
+                }
             }
             IconButton(onClick = onDelete, enabled = selectedCount > 0) {
                 Icon(imageVector = Icons.Outlined.Delete, contentDescription = stringResource(id = R.string.action_delete))
@@ -828,31 +847,24 @@ private fun TaskHeaderRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = timeLabel,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.widthIn(min = 72.dp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = task.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Text(
+                text = timeLabel,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = task.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
             subtitle?.let {
                 Text(
                     text = it,
@@ -1035,7 +1047,8 @@ private fun WeekView(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 96.dp)
     ) {
         items(days) { date ->
             val tasksForDay = weekTasks[date].orEmpty().sortedBy { it.start }
