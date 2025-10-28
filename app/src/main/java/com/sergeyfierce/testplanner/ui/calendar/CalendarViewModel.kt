@@ -170,6 +170,16 @@ class CalendarViewModel(
         }
     }
 
+    suspend fun validateSchedule(
+        taskId: String?,
+        date: LocalDate,
+        type: TaskType,
+        start: LocalTime,
+        end: LocalTime?
+    ): String? {
+        return repository.findScheduleConflict(taskId, date, type, start, end)
+    }
+
     private suspend fun runCatching(block: suspend () -> Unit) {
         try {
             block()

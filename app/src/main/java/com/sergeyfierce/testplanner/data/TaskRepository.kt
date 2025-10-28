@@ -82,21 +82,46 @@ class TaskRepository(private val dao: TaskDao) {
         if (task.type == TaskType.INTERVAL) {
             requireNotNull(task.end) { "Интервальной задаче требуется окончание" }
         }
-        val sameDayTasks = dao.getTasksForDate(task.date.toString())
-            .filterNot { it.id == task.id }
+        val conflictMessage = findScheduleConflict(
+            taskId = task.id,
+            date = task.date,
+            type = task.type,
+            start = task.start,
+            end = task.end
+        )
+        require(conflictMessage == null) { conflictMessage ?: "" }
+    }
+
+    suspend fun findScheduleConflict(
+        taskId: String?,
+        date: LocalDate,
+        type: TaskType,
+        start: LocalTime,
+        end: LocalTime?
+    ): String? {
+        val sameDayTasks = dao.getTasksForDate(date.toString())
+            .filterNot { it.id == taskId }
             .map { it.toDomain() }
 
-        if (task.type == TaskType.INTERVAL) {
-            val overlap = sameDayTasks.any { other ->
-                other.type == TaskType.INTERVAL && task.overlaps(other)
+        return when (type) {
+            TaskType.INTERVAL -> {
+                if (end == null) return "Интервальной задаче требуется окончание"
+                val conflict = sameDayTasks.firstOrNull { other ->
+                    other.type == TaskType.INTERVAL && start < requireNotNull(other.end) && other.start < end
+                }
+                conflict?.let { other ->
+                    "Интервал пересекается с задачей \"${other.title}\""
+                }
             }
-            require(!overlap) { "Основные активности не должны пересекаться" }
+            TaskType.POINT -> {
+                val conflict = sameDayTasks.firstOrNull { other ->
+                    other.type == TaskType.POINT && other.start == start
+                }
+                conflict?.let { other ->
+                    "На это время уже есть задача \"${other.title}\""
+                }
+            }
         }
     }
 
-    private fun Task.overlaps(other: Task): Boolean {
-        val thisEnd = requireNotNull(end)
-        val otherEnd = requireNotNull(other.end)
-        return start < otherEnd && other.start < thisEnd
-    }
 }
