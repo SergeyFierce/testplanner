@@ -16,6 +16,13 @@
     <string name="save">Сохранить</string>
     <string name="dialog_delete_title">Удалить задачу?</string>
     <string name="dialog_delete_message">Вы действительно хотите удалить задачу?</string>
+    <string name="dialog_delete_selected_title">Удалить выбранные задачи?</string>
+    <plurals name="dialog_delete_selected_message">
+        <item quantity="one">Вы действительно хотите удалить %d выбранную задачу?</item>
+        <item quantity="few">Вы действительно хотите удалить %d выбранные задачи?</item>
+        <item quantity="many">Вы действительно хотите удалить %d выбранных задач?</item>
+        <item quantity="other">Вы действительно хотите удалить %d выбранных задач?</item>
+    </plurals>
     <string name="field_title">Название</string>
     <string name="field_description">Описание</string>
     <string name="field_start">Начало</string>
@@ -33,6 +40,13 @@
     <string name="nav_calendar">Календарь</string>
     <string name="nav_statistics">Статистика</string>
     <string name="nav_settings">Настройки</string>
+    <string name="selection_count">Выбрано: %1$d</string>
+    <string name="action_cancel">Отменить</string>
+    <string name="action_delete">Удалить</string>
+    <string name="action_discard">Не сохранять</string>
+    <string name="edit_completed_not_allowed">Выполненные задачи нельзя редактировать</string>
+    <string name="unsaved_changes_title">Сохранить изменения?</string>
+    <string name="unsaved_changes_message">Вы внесли изменения. Сохранить их перед выходом?</string>
     <string name="statistics_placeholder">Раздел в разработке. В будущем здесь появится аналитика и графики выполнения дня.</string>
     <string name="settings_placeholder">Раздел в разработке. Здесь можно будет изменить тему, уведомления и параметры интерфейса.</string>
 </resources>
