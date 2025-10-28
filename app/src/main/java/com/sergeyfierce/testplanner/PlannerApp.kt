@@ -53,30 +53,23 @@ fun PlannerApp(
 
     Scaffold(
         bottomBar = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 24.dp)
-            ) {
-                PlannerNavigationBar(
-                    destinations = items,
-                    currentDestination = currentRoute,
-                    onDestinationSelected = { destination ->
-                        navController.navigate(destination.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
+            PlannerNavigationBar(
+                destinations = items,
+                currentDestination = currentRoute,
+                onDestinationSelected = { destination ->
+                    navController.navigate(destination.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
                         }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                )
-            }
-        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                modifier = Modifier
+                    .padding(horizontal = 8.dp, vertical = 8.dp) // Минимальные отступы
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         NavHost(
             navController = navController,
@@ -106,38 +99,52 @@ private fun PlannerNavigationBar(
     onDestinationSelected: (PlannerDestination) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        shape = RectangleShape,
-        tonalElevation = 0.dp,
-        shadowElevation = 12.dp,
-        color = MaterialTheme.colorScheme.surface,
-        modifier = modifier
+    NavigationBar(
+        modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), // Полупрозрачный фон
+        tonalElevation = 8.dp, // Лёгкая тень
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
-        NavigationBar(
-            containerColor = Color.Transparent,
-        ) {
-            destinations.forEach { destination ->
-                NavigationBarItem(
-                    selected = currentDestination == destination.route,
-                    onClick = { onDestinationSelected(destination) },
-                    icon = {
-                        when (destination) {
-                            PlannerDestination.CALENDAR -> Icon(imageVector = Icons.Outlined.CalendarMonth, contentDescription = null)
-                            PlannerDestination.STATISTICS -> Icon(imageVector = Icons.Outlined.BarChart, contentDescription = null)
-                            PlannerDestination.SETTINGS -> Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
-                        }
-                    },
-                    label = {
-                        Text(
-                            text = when (destination) {
-                                PlannerDestination.CALENDAR -> stringResource(R.string.nav_calendar)
-                                PlannerDestination.STATISTICS -> stringResource(R.string.nav_statistics)
-                                PlannerDestination.SETTINGS -> stringResource(R.string.nav_settings)
-                            }
-                        )
+        destinations.forEach { destination ->
+            val selected = currentDestination == destination.route
+            NavigationBarItem(
+                selected = selected,
+                onClick = { onDestinationSelected(destination) },
+                icon = {
+                    val icon = when (destination) {
+                        PlannerDestination.CALENDAR -> Icons.Outlined.CalendarMonth
+                        PlannerDestination.STATISTICS -> Icons.Outlined.BarChart
+                        PlannerDestination.SETTINGS -> Icons.Outlined.Settings
                     }
-                )
-            }
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                },
+                label = {
+                    Text(
+                        text = stringResource(
+                            when (destination) {
+                                PlannerDestination.CALENDAR -> R.string.nav_calendar
+                                PlannerDestination.STATISTICS -> R.string.nav_statistics
+                                PlannerDestination.SETTINGS -> R.string.nav_settings
+                            }
+                        ),
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                },
+                alwaysShowLabel = true // Всегда показываем текст (по желанию можно убрать)
+            )
         }
     }
 }
