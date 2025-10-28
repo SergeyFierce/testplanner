@@ -105,6 +105,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -475,58 +476,61 @@ private fun CalendarTopBar(
     onDateClick: () -> Unit
 ) {
     val formatter = remember { DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.getDefault()) }
+    val dateShape = RoundedCornerShape(24.dp)
     TopAppBar(
         title = {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Start
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                IconButton(
-                    onClick = onPrevious,
-                    modifier = Modifier.size(36.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(imageVector = Icons.Filled.KeyboardArrowLeft, contentDescription = null)
-                }
-                Surface(
-                    onClick = onDateClick,
-                    shape = RoundedCornerShape(24.dp),
-                    tonalElevation = 2.dp,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    modifier = Modifier
-                        .padding(vertical = 4.dp, horizontal = 4.dp)
-                ) {
-                    Text(
-                        text = formatter.format(currentDate.toJavaLocalDate()),
+                    IconButton(
+                        onClick = onPrevious,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(imageVector = Icons.Filled.KeyboardArrowLeft, contentDescription = null)
+                    }
+                    Surface(
+                        onClick = onDateClick,
+                        shape = dateShape,
+                        tonalElevation = 2.dp,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                            .clip(dateShape)
+                    ) {
+                        Text(
+                            text = formatter.format(currentDate.toJavaLocalDate()),
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    IconButton(
+                        onClick = onNext,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = null)
+                    }
                 }
-                IconButton(
-                    onClick = onNext,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = null)
+                AnimatedVisibility(visible = showTodayButton) {
+                    FilledTonalButton(
+                        onClick = onToday,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .heightIn(min = 40.dp)
+                    ) {
+                        Text(text = stringResource(id = R.string.go_to_today))
+                    }
                 }
-                Spacer(modifier = Modifier.weight(1f))
             }
         },
-        actions = {
-            AnimatedVisibility(visible = showTodayButton) {
-                FilledTonalButton(
-                    onClick = onToday,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    modifier = Modifier
-                        .padding(end = 12.dp)
-                        .heightIn(min = 40.dp)
-                ) {
-                    Text(text = stringResource(id = R.string.today))
-                }
-            }
-        },
+        actions = {},
         navigationIcon = {},
         windowInsets = WindowInsets(0, 0, 0, 0)
     )
@@ -726,11 +730,13 @@ private fun FreeTimeCard(
     freeTime: DayTimelineItem.FreeTime,
     onAddTask: (LocalTime) -> Unit
 ) {
+    val shape = RoundedCornerShape(16.dp)
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = shape,
         tonalElevation = 2.dp,
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
             .clickable { onAddTask(freeTime.start) }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -909,6 +915,7 @@ private fun TaskCardContainer(
         border = border,
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
             .animateContentSize(animationSpec = tween(durationMillis = 250))
             .combinedClickable(
                 onClick = onClick,
@@ -1174,14 +1181,16 @@ private fun WeekView(
                     isExpanded = false
                 }
             }
+            val dayShape = RoundedCornerShape(16.dp)
             Surface(
                 onClick = { onDayClick(date) },
-                shape = RoundedCornerShape(16.dp),
+                shape = dayShape,
                 color = dayContainerColor,
                 tonalElevation = if (isSelected || isToday) 4.dp else 1.dp,
                 border = dayBorder,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clip(dayShape)
                     .animateContentSize(animationSpec = tween(durationMillis = 250))
             ) {
                 Column(
@@ -1297,9 +1306,10 @@ private fun MonthView(
             val hasImportant = tasksForDay.any { it.isImportant }
             val hasTasks = tasksForDay.isNotEmpty()
             val allTasksDone = hasTasks && tasksForDay.all { it.isDone }
+            val dayShape = RoundedCornerShape(10.dp)
             Surface(
                 onClick = { if (isCurrentMonth) onDayClick(date) },
-                shape = RoundedCornerShape(10.dp),
+                shape = dayShape,
                 color = when {
                     date == currentDate -> MaterialTheme.colorScheme.primaryContainer
                     date == today() -> MaterialTheme.colorScheme.secondaryContainer
@@ -1310,6 +1320,7 @@ private fun MonthView(
                 modifier = Modifier
                     .height(64.dp)
                     .fillMaxWidth()
+                    .clip(dayShape)
             ) {
                 Box(
                     modifier = Modifier
@@ -1583,12 +1594,15 @@ private fun TaskEditorScreen(
                     shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
                 )
+                val dateShape = RoundedCornerShape(12.dp)
                 Surface(
                     onClick = { isDatePickerVisible = true },
-                    shape = RoundedCornerShape(12.dp),
+                    shape = dateShape,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                     tonalElevation = 0.dp,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(dateShape)
                 ) {
                     Row(
                         modifier = Modifier
@@ -1756,12 +1770,15 @@ private fun ImportantSelector(isImportant: Boolean, onChanged: (Boolean) -> Unit
     } else {
         stringResource(id = R.string.task_status_regular)
     }
+    val shape = RoundedCornerShape(12.dp)
     Surface(
         onClick = { onChanged(!isImportant) },
-        shape = RoundedCornerShape(12.dp),
+        shape = shape,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         tonalElevation = 0.dp,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
     ) {
         Row(
             modifier = Modifier
