@@ -42,7 +42,6 @@
     <string name="nav_settings">Настройки</string>
     <string name="selection_count">Выбрано: %1$d</string>
     <string name="action_cancel">Отменить</string>
-    <string name="action_select_all">Выбрать все</string>
     <string name="action_delete">Удалить</string>
     <string name="action_discard">Не сохранять</string>
     <string name="edit_completed_not_allowed">Выполненные задачи нельзя редактировать</string>
