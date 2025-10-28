@@ -53,6 +53,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -328,13 +329,12 @@ private fun CalendarTopBar(
                     tonalElevation = 2.dp,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier
-                        .widthIn(min = 160.dp)
+                        .widthIn(min = 140.dp, max = 240.dp)
                         .padding(vertical = 4.dp)
                 ) {
                     Row(
                         modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .fillMaxWidth(),
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -345,7 +345,7 @@ private fun CalendarTopBar(
                         )
                         Text(
                             text = formatter.format(currentDate.toJavaLocalDate()),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.widthIn(max = 160.dp),
                             textAlign = TextAlign.Center,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -539,7 +539,7 @@ private sealed interface DayTimelineItem {
     data class TaskBlock(val task: Task, val nestedPoints: List<Task> = emptyList()) : DayTimelineItem
 }
 
-private const val MIN_FREE_SLOT_MINUTES = 30
+private const val MIN_FREE_SLOT_MINUTES = 60
 
 private fun buildTimeline(tasks: List<Task>): List<DayTimelineItem> {
     if (tasks.isEmpty()) {
@@ -616,18 +616,18 @@ private val LocalDateSaver = Saver<LocalDate, String>(
 )
 
 @Composable
-private fun taskContainerColor(task: Task): Color = when {
+private fun taskContainerColor(task: Task, useIntervalStyle: Boolean = false): Color = when {
     task.isDone -> TaskDoneGreen
     task.isImportant -> MaterialTheme.colorScheme.errorContainer
-    task.isInterval -> MaterialTheme.colorScheme.primaryContainer
+    task.isInterval || useIntervalStyle -> MaterialTheme.colorScheme.primaryContainer
     else -> MaterialTheme.colorScheme.secondaryContainer
 }
 
 @Composable
-private fun taskContentColor(task: Task): Color = when {
-    task.isDone -> MaterialTheme.colorScheme.onPrimaryContainer
+private fun taskContentColor(task: Task, useIntervalStyle: Boolean = false): Color = when {
+    task.isDone -> Color.White
     task.isImportant -> MaterialTheme.colorScheme.onErrorContainer
-    task.isInterval -> MaterialTheme.colorScheme.onPrimaryContainer
+    task.isInterval || useIntervalStyle -> MaterialTheme.colorScheme.onPrimaryContainer
     else -> MaterialTheme.colorScheme.onSecondaryContainer
 }
 @Composable
@@ -710,8 +710,8 @@ private fun PointTaskCard(
     Surface(
         shape = RoundedCornerShape(12.dp),
         tonalElevation = 4.dp,
-        color = taskContainerColor(task),
-        contentColor = taskContentColor(task),
+        color = taskContainerColor(task, useIntervalStyle = true),
+        contentColor = taskContentColor(task, useIntervalStyle = true),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -750,7 +750,7 @@ private fun NestedPointTaskCard(
     showActions: Boolean = onToggle != null
 ) {
     val (containerColor, contentColor, border) = when {
-        task.isDone -> Triple(TaskDoneGreen, MaterialTheme.colorScheme.onPrimaryContainer, null)
+        task.isDone -> Triple(TaskDoneGreen, Color.White, null)
         task.isImportant -> Triple(
             MaterialTheme.colorScheme.errorContainer,
             MaterialTheme.colorScheme.onErrorContainer,
@@ -833,15 +833,22 @@ private fun WeekView(
             val tasksForDay = weekTasks[date].orEmpty().sortedBy { it.start }
             val isToday = date == today()
             val isSelected = date == currentDate
+            val dayContainerColor = when {
+                isSelected -> MaterialTheme.colorScheme.surface
+                isToday -> MaterialTheme.colorScheme.surface
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
+            val dayBorder = when {
+                isSelected -> BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                isToday -> BorderStroke(1.dp, MaterialTheme.colorScheme.secondary)
+                else -> null
+            }
             Surface(
                 onClick = { onDayClick(date) },
                 shape = RoundedCornerShape(16.dp),
-                color = when {
-                    isSelected -> MaterialTheme.colorScheme.primaryContainer
-                    isToday -> MaterialTheme.colorScheme.secondaryContainer
-                    else -> MaterialTheme.colorScheme.surfaceVariant
-                },
+                color = dayContainerColor,
                 tonalElevation = if (isSelected || isToday) 4.dp else 1.dp,
+                border = dayBorder,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -959,7 +966,7 @@ private fun MonthView(
         }
     }
 }
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 private fun TaskEditorScreen(
     initialTask: Task?,
@@ -1099,7 +1106,8 @@ private fun TaskEditorScreen(
                         ) {
                             Text(text = stringResource(id = R.string.save))
                         }
-                    }
+                    },
+                    windowInsets = WindowInsets(0, 0, 0, 0)
                 )
             },
             contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -1161,37 +1169,45 @@ private fun TaskEditorScreen(
                     }
                 }
                 TypeSelector(selected = type, onSelect = { type = it })
-                if (type == TaskType.INTERVAL) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
+                AnimatedContent(
+                    targetState = type,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween()) togetherWith fadeOut(animationSpec = tween()))
+                    },
+                    label = "task-type-time-pickers"
+                ) { currentType ->
+                    if (currentType == TaskType.INTERVAL) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            WheelTimePicker(
+                                label = stringResource(id = R.string.field_start),
+                                hour = startHour,
+                                minute = startMinute,
+                                onHourChanged = { startHour = it },
+                                onMinuteChanged = { startMinute = it },
+                                modifier = Modifier.weight(1f)
+                            )
+                            WheelTimePicker(
+                                label = stringResource(id = R.string.field_end),
+                                hour = endHour,
+                                minute = endMinute,
+                                onHourChanged = { endHour = it },
+                                onMinuteChanged = { endMinute = it },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else {
                         WheelTimePicker(
                             label = stringResource(id = R.string.field_start),
                             hour = startHour,
                             minute = startMinute,
                             onHourChanged = { startHour = it },
                             onMinuteChanged = { startMinute = it },
-                            modifier = Modifier.weight(1f)
-                        )
-                        WheelTimePicker(
-                            label = stringResource(id = R.string.field_end),
-                            hour = endHour,
-                            minute = endMinute,
-                            onHourChanged = { endHour = it },
-                            onMinuteChanged = { endMinute = it },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
-                } else {
-                    WheelTimePicker(
-                        label = stringResource(id = R.string.field_start),
-                        hour = startHour,
-                        minute = startMinute,
-                        onHourChanged = { startHour = it },
-                        onMinuteChanged = { startMinute = it },
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
                 ImportantSelector(isImportant = isImportant, onChanged = { isImportant = it })
                 scheduleError?.let {
@@ -1296,7 +1312,12 @@ private fun ImportantSelector(isImportant: Boolean, onChanged: (Boolean) -> Unit
                     }
                 } else {
                     null
-                }
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.error,
+                    selectedLabelColor = MaterialTheme.colorScheme.onError,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onError
+                )
             )
         }
     }
