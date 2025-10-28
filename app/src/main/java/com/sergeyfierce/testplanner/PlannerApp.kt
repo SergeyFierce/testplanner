@@ -33,6 +33,7 @@ import com.sergeyfierce.testplanner.ui.calendar.CalendarScreen
 import com.sergeyfierce.testplanner.ui.calendar.CalendarViewModel
 import com.sergeyfierce.testplanner.ui.calendar.CalendarViewModelFactory
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 
 private enum class PlannerDestination(val route: String) {
     CALENDAR("calendar"),
