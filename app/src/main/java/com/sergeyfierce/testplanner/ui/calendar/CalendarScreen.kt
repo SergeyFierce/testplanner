@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -48,11 +49,10 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -321,15 +321,38 @@ private fun CalendarTopBar(
                 IconButton(onClick = onPrevious) {
                     Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = null)
                 }
-                Text(
-                    text = formatter.format(currentDate.toJavaLocalDate()),
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    onClick = onDateClick,
+                    shape = RoundedCornerShape(24.dp),
+                    tonalElevation = 2.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier
-                        .weight(1f)
-                        .clickable(onClick = onDateClick),
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                        .widthIn(min = 160.dp)
+                        .padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CalendarToday,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = formatter.format(currentDate.toJavaLocalDate()),
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
                 IconButton(onClick = onNext) {
                     Icon(imageVector = Icons.Filled.ArrowForward, contentDescription = null)
                 }
@@ -507,20 +530,6 @@ private fun FreeTimeCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = stringResource(id = R.string.free_time_add),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
         }
     }
 }
@@ -529,6 +538,8 @@ private sealed interface DayTimelineItem {
     data class FreeTime(val start: LocalTime, val endExclusive: LocalTime?) : DayTimelineItem
     data class TaskBlock(val task: Task, val nestedPoints: List<Task> = emptyList()) : DayTimelineItem
 }
+
+private const val MIN_FREE_SLOT_MINUTES = 30
 
 private fun buildTimeline(tasks: List<Task>): List<DayTimelineItem> {
     if (tasks.isEmpty()) {
@@ -547,7 +558,7 @@ private fun buildTimeline(tasks: List<Task>): List<DayTimelineItem> {
             val start = task.start
             val end = task.end ?: task.start
             if (cursor < start) {
-                result += DayTimelineItem.FreeTime(cursor, start)
+                result.addFreeTimeIfNeeded(cursor, start)
             }
             val nested = pointTasks
                 .filter { candidate ->
@@ -562,7 +573,7 @@ private fun buildTimeline(tasks: List<Task>): List<DayTimelineItem> {
         } else if (task.id !in consumedPointIds) {
             val start = task.start
             if (cursor < start) {
-                result += DayTimelineItem.FreeTime(cursor, start)
+                result.addFreeTimeIfNeeded(cursor, start)
             }
             result += DayTimelineItem.TaskBlock(task = task)
             if (start > cursor) {
@@ -572,10 +583,24 @@ private fun buildTimeline(tasks: List<Task>): List<DayTimelineItem> {
     }
 
     if (cursor < LocalTime(23, 59)) {
-        result += DayTimelineItem.FreeTime(cursor, null)
+        result.addFreeTimeIfNeeded(cursor, null)
     }
 
     return result
+}
+
+private fun MutableList<DayTimelineItem>.addFreeTimeIfNeeded(start: LocalTime, endExclusive: LocalTime?) {
+    if (endExclusive != null) {
+        if (start >= endExclusive) return
+        if (minutesBetween(start, endExclusive) < MIN_FREE_SLOT_MINUTES) return
+    }
+    this += DayTimelineItem.FreeTime(start, endExclusive)
+}
+
+private fun minutesBetween(start: LocalTime, end: LocalTime): Int {
+    val startMinutes = start.hour * 60 + start.minute
+    val endMinutes = end.hour * 60 + end.minute
+    return endMinutes - startMinutes
 }
 
 private fun LocalTime.toTimeLabel(): String = "%02d:%02d".format(hour, minute)
@@ -609,9 +634,10 @@ private fun taskContentColor(task: Task): Color = when {
 private fun IntervalTaskCard(
     task: Task,
     nestedPoints: List<Task>,
-    onToggle: (Task, Boolean) -> Unit,
-    onEdit: (Task) -> Unit,
-    onDelete: (Task) -> Unit
+    onToggle: ((Task, Boolean) -> Unit)? = null,
+    onEdit: ((Task) -> Unit)? = null,
+    onDelete: ((Task) -> Unit)? = null,
+    showActions: Boolean = onToggle != null
 ) {
     Surface(
         tonalElevation = 6.dp,
@@ -627,7 +653,8 @@ private fun IntervalTaskCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = task.isDone,
-                    onCheckedChange = { onToggle(task, it) }
+                    onCheckedChange = { onToggle?.invoke(task, it) },
+                    enabled = showActions
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -640,11 +667,13 @@ private fun IntervalTaskCard(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-                IconButton(onClick = { onEdit(task) }) {
-                    Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
-                }
-                IconButton(onClick = { onDelete(task) }) {
-                    Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                if (showActions) {
+                    IconButton(onClick = { onEdit?.invoke(task) }) {
+                        Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
+                    }
+                    IconButton(onClick = { onDelete?.invoke(task) }) {
+                        Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                    }
                 }
             }
             if (!task.description.isNullOrBlank()) {
@@ -660,7 +689,8 @@ private fun IntervalTaskCard(
                             task = nested,
                             onToggle = onToggle,
                             onEdit = onEdit,
-                            onDelete = onDelete
+                            onDelete = onDelete,
+                            showActions = showActions
                         )
                     }
                 }
@@ -672,9 +702,10 @@ private fun IntervalTaskCard(
 @Composable
 private fun PointTaskCard(
     task: Task,
-    onToggle: (Task, Boolean) -> Unit,
-    onEdit: (Task) -> Unit,
-    onDelete: (Task) -> Unit
+    onToggle: ((Task, Boolean) -> Unit)? = null,
+    onEdit: ((Task) -> Unit)? = null,
+    onDelete: ((Task) -> Unit)? = null,
+    showActions: Boolean = onToggle != null
 ) {
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -689,16 +720,22 @@ private fun PointTaskCard(
                 .padding(horizontal = 12.dp, vertical = 8.dp)
                 .fillMaxWidth()
         ) {
-            Checkbox(checked = task.isDone, onCheckedChange = { onToggle(task, it) })
+            Checkbox(
+                checked = task.isDone,
+                onCheckedChange = { onToggle?.invoke(task, it) },
+                enabled = showActions
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = task.title, style = MaterialTheme.typography.bodyMedium)
                 Text(text = timeRangeLabel(task), style = MaterialTheme.typography.bodySmall)
             }
-            IconButton(onClick = { onEdit(task) }) {
-                Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
-            }
-            IconButton(onClick = { onDelete(task) }) {
-                Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+            if (showActions) {
+                IconButton(onClick = { onEdit?.invoke(task) }) {
+                    Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
+                }
+                IconButton(onClick = { onDelete?.invoke(task) }) {
+                    Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                }
             }
         }
     }
@@ -707,40 +744,11 @@ private fun PointTaskCard(
 @Composable
 private fun NestedPointTaskCard(
     task: Task,
-    onToggle: (Task, Boolean) -> Unit,
-    onEdit: (Task) -> Unit,
-    onDelete: (Task) -> Unit
+    onToggle: ((Task, Boolean) -> Unit)? = null,
+    onEdit: ((Task) -> Unit)? = null,
+    onDelete: ((Task) -> Unit)? = null,
+    showActions: Boolean = onToggle != null
 ) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        tonalElevation = 0.dp,
-        color = taskContainerColor(task),
-        contentColor = taskContentColor(task),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-                .fillMaxWidth()
-        ) {
-            Checkbox(checked = task.isDone, onCheckedChange = { onToggle(task, it) })
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = task.title, style = MaterialTheme.typography.bodyMedium)
-                Text(text = task.start.toTimeLabel(), style = MaterialTheme.typography.bodySmall)
-            }
-            IconButton(onClick = { onEdit(task) }) {
-                Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
-            }
-            IconButton(onClick = { onDelete(task) }) {
-                Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
-            }
-        }
-    }
-}
-
-@Composable
-private fun WeekTaskPreview(task: Task) {
     val (containerColor, contentColor, border) = when {
         task.isDone -> Triple(TaskDoneGreen, MaterialTheme.colorScheme.onPrimaryContainer, null)
         task.isImportant -> Triple(
@@ -754,30 +762,38 @@ private fun WeekTaskPreview(task: Task) {
             BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         )
     }
+
     Surface(
         shape = RoundedCornerShape(12.dp),
-        tonalElevation = 2.dp,
+        tonalElevation = if (task.isImportant || task.isDone) 0.dp else 1.dp,
         color = containerColor,
         contentColor = contentColor,
         border = border,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .fillMaxWidth()
         ) {
-            Text(
-                text = task.title,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            Checkbox(
+                checked = task.isDone,
+                onCheckedChange = { onToggle?.invoke(task, it) },
+                enabled = showActions
             )
-            Text(
-                text = timeRangeLabel(task),
-                style = MaterialTheme.typography.bodySmall
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = task.title, style = MaterialTheme.typography.bodyMedium)
+                Text(text = task.start.toTimeLabel(), style = MaterialTheme.typography.bodySmall)
+            }
+            if (showActions) {
+                IconButton(onClick = { onEdit?.invoke(task) }) {
+                    Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
+                }
+                IconButton(onClick = { onDelete?.invoke(task) }) {
+                    Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                }
+            }
         }
     }
 }
@@ -849,16 +865,24 @@ private fun WeekView(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            tasksForDay.take(4).forEach { task ->
-                                WeekTaskPreview(task = task)
-                            }
+                        val timelineItems = remember(tasksForDay) {
+                            buildTimeline(tasksForDay).filterIsInstance<DayTimelineItem.TaskBlock>()
                         }
-                        if (tasksForDay.size > 4) {
-                            Text(
-                                text = stringResource(id = R.string.more_tasks, tasksForDay.size - 4),
-                                style = MaterialTheme.typography.labelSmall
-                            )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            timelineItems.forEach { item ->
+                                if (item.task.isInterval) {
+                                    IntervalTaskCard(
+                                        task = item.task,
+                                        nestedPoints = item.nestedPoints,
+                                        showActions = false
+                                    )
+                                } else {
+                                    PointTaskCard(
+                                        task = item.task,
+                                        showActions = false
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1077,12 +1101,14 @@ private fun TaskEditorScreen(
                         }
                     }
                 )
-            }
+            },
+            contentWindowInsets = WindowInsets(0, 0, 0, 0)
         ) { innerPadding ->
             Column(
                 modifier = Modifier
                     .padding(innerPadding)
-                    .padding(horizontal = 16.dp, vertical = 24.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -1135,19 +1161,19 @@ private fun TaskEditorScreen(
                     }
                 }
                 TypeSelector(selected = type, onSelect = { type = it })
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    WheelTimePicker(
-                        label = stringResource(id = R.string.field_start),
-                        hour = startHour,
-                        minute = startMinute,
-                        onHourChanged = { startHour = it },
-                        onMinuteChanged = { startMinute = it },
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (type == TaskType.INTERVAL) {
+                if (type == TaskType.INTERVAL) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        WheelTimePicker(
+                            label = stringResource(id = R.string.field_start),
+                            hour = startHour,
+                            minute = startMinute,
+                            onHourChanged = { startHour = it },
+                            onMinuteChanged = { startMinute = it },
+                            modifier = Modifier.weight(1f)
+                        )
                         WheelTimePicker(
                             label = stringResource(id = R.string.field_end),
                             hour = endHour,
@@ -1157,6 +1183,15 @@ private fun TaskEditorScreen(
                             modifier = Modifier.weight(1f)
                         )
                     }
+                } else {
+                    WheelTimePicker(
+                        label = stringResource(id = R.string.field_start),
+                        hour = startHour,
+                        minute = startMinute,
+                        onHourChanged = { startHour = it },
+                        onMinuteChanged = { startMinute = it },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
                 ImportantSelector(isImportant = isImportant, onChanged = { isImportant = it })
                 scheduleError?.let {
@@ -1218,24 +1253,52 @@ private fun TypeSelector(selected: TaskType, onSelect: (TaskType) -> Unit) {
 
 @Composable
 private fun ImportantSelector(isImportant: Boolean, onChanged: (Boolean) -> Unit) {
-    val buttonColors = if (isImportant) {
-        ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.error,
-            contentColor = MaterialTheme.colorScheme.onError
-        )
+    val statusText = if (isImportant) {
+        stringResource(id = R.string.task_status_important)
     } else {
-        ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurface
-        )
+        stringResource(id = R.string.task_status_regular)
     }
-    Button(
+    Surface(
         onClick = { onChanged(!isImportant) },
-        colors = buttonColors
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        tonalElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Icon(imageVector = Icons.Filled.PriorityHigh, contentDescription = null)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(text = stringResource(id = R.string.field_important))
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(id = R.string.field_important),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            FilterChip(
+                selected = isImportant,
+                onClick = { onChanged(!isImportant) },
+                label = {
+                    Text(text = statusText)
+                },
+                leadingIcon = if (isImportant) {
+                    {
+                        Icon(imageVector = Icons.Filled.PriorityHigh, contentDescription = null)
+                    }
+                } else {
+                    null
+                }
+            )
+        }
     }
 }
 
@@ -1264,36 +1327,45 @@ private fun WheelTimePicker(
     onMinuteChanged: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val textColor = MaterialTheme.colorScheme.onSurface // или Color.White, если строго
+    val textColor = MaterialTheme.colorScheme.onSurface
 
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
     ) {
-        Text(text = label, style = MaterialTheme.typography.titleSmall)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            NumberWheel(
-                range = 0..23,
-                value = hour,
-                onValueChange = onHourChanged,
-                modifier = Modifier.weight(1f),
-                textColor = textColor
-            )
-            Text(
-                text = ":",
-                style = MaterialTheme.typography.titleLarge,
-                color = textColor
-            )
-            NumberWheel(
-                range = 0..59,
-                value = minute,
-                onValueChange = onMinuteChanged,
-                modifier = Modifier.weight(1f),
-                textColor = textColor
-            )
+            Text(text = label, style = MaterialTheme.typography.titleSmall)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                NumberWheel(
+                    range = 0..23,
+                    value = hour,
+                    onValueChange = onHourChanged,
+                    modifier = Modifier.weight(1f),
+                    textColor = textColor
+                )
+                Text(
+                    text = ":",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = textColor
+                )
+                NumberWheel(
+                    range = 0..59,
+                    value = minute,
+                    onValueChange = onMinuteChanged,
+                    modifier = Modifier.weight(1f),
+                    textColor = textColor
+                )
+            }
         }
     }
 }
