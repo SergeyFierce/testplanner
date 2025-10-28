@@ -74,6 +74,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
@@ -1157,17 +1158,16 @@ private fun ImportantSelector(isImportant: Boolean, onChanged: (Boolean) -> Unit
         selected = isImportant,
         onClick = { onChanged(!isImportant) },
         label = { Text(text = stringResource(id = R.string.field_important)) },
-        leadingIcon = {
-            Icon(imageVector = Icons.Filled.PriorityHigh, contentDescription = null)
-        },
+        leadingIcon = { Icon(imageVector = Icons.Filled.PriorityHigh, contentDescription = null) },
         colors = FilterChipDefaults.filterChipColors(
-            leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            iconColor = MaterialTheme.colorScheme.onSurfaceVariant,            // ← было leadingIconColor
             selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
             selectedLabelColor = MaterialTheme.colorScheme.onErrorContainer,
             selectedLeadingIconColor = MaterialTheme.colorScheme.onErrorContainer
         )
     )
 }
+
 
 @Composable
 private fun WheelTimePicker(
@@ -1178,7 +1178,7 @@ private fun WheelTimePicker(
     onMinuteChanged: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val valueColor = MaterialTheme.colorScheme.onSurface
+    val textColor = MaterialTheme.colorScheme.onSurface // или Color.White, если строго
 
     Column(
         modifier = modifier,
@@ -1194,19 +1194,19 @@ private fun WheelTimePicker(
                 value = hour,
                 onValueChange = onHourChanged,
                 modifier = Modifier.weight(1f),
-                textColor = valueColor
+                textColor = textColor
             )
             Text(
                 text = ":",
                 style = MaterialTheme.typography.titleLarge,
-                color = valueColor
+                color = textColor
             )
             NumberWheel(
                 range = 0..59,
                 value = minute,
                 onValueChange = onMinuteChanged,
                 modifier = Modifier.weight(1f),
-                textColor = valueColor
+                textColor = textColor
             )
         }
     }
@@ -1218,10 +1218,13 @@ private fun NumberWheel(
     value: Int,
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    textColor: Color
+    textColor: Color = MaterialTheme.colorScheme.onSurface // по умолчанию из темы
 ) {
     AndroidView(
-        modifier = modifier.height(140.dp),
+        modifier = modifier
+            .height(140.dp)
+            .clipToBounds()
+        ,
         factory = { context ->
             NumberPicker(context).apply {
                 minValue = range.first
@@ -1231,7 +1234,23 @@ private fun NumberWheel(
                 descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
                 setFormatter { "%02d".format(it) }
                 setOnValueChangedListener { _, _, newVal -> onValueChange(newVal) }
-                setWheelTextColor(textColor.toArgb())
+
+                // === БЕЗОПАСНАЯ стилизация ===
+                // 1. Цвет текста (API 29+)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    setTextColor(textColor.toArgb())
+                }
+
+                // 2. Принудительно белый текст для EditText (всегда работает)
+                children.forEach { child ->
+                    if (child is EditText) {
+                        child.setTextColor(textColor.toArgb())
+                        child.highlightColor = textColor.copy(alpha = 0.3f).toArgb()
+                    }
+                }
+
+                // 3. Отключаем стандартную анимацию и фон
+                setBackgroundColor(Color.Transparent.toArgb())
             }
         },
         update = { picker ->
@@ -1239,28 +1258,21 @@ private fun NumberWheel(
                 picker.minValue = range.first
                 picker.maxValue = range.last
             }
-            if (picker.value != value) {
+            if (picker.value != value.coerceIn(range)) {
                 picker.value = value.coerceIn(range)
             }
-            picker.setFormatter { "%02d".format(it) }
-            picker.setWheelTextColor(textColor.toArgb())
+
+            // Обновляем цвет при смене темы
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                picker.setTextColor(textColor.toArgb())
+            }
+            picker.children.forEach { child ->
+                if (child is EditText) {
+                    child.setTextColor(textColor.toArgb())
+                }
+            }
         }
     )
-}
-
-private fun NumberPicker.setWheelTextColor(color: Int) {
-    try {
-        val field = NumberPicker::class.java.getDeclaredField("mSelectorWheelPaint")
-        field.isAccessible = true
-        (field.get(this) as? Paint)?.color = color
-    } catch (_: Exception) {
-    }
-    children.forEach { child ->
-        if (child is EditText) {
-            child.setTextColor(color)
-        }
-    }
-    invalidate()
 }
 
 private fun defaultEndFor(start: LocalTime): LocalTime {
