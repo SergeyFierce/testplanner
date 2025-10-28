@@ -1,39 +1,40 @@
 package com.sergeyfierce.testplanner.ui.calendar
 
-import androidx.compose.material3.ExperimentalMaterial3Api
+import android.widget.NumberPicker
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.TaskAlt
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -54,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -64,7 +66,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.sergeyfierce.testplanner.R
 import com.sergeyfierce.testplanner.domain.model.CalendarMode
 import com.sergeyfierce.testplanner.domain.model.Task
@@ -81,7 +85,6 @@ import kotlinx.datetime.toLocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-
 @Composable
 fun CalendarScreen(
     viewModel: CalendarViewModel,
@@ -107,117 +110,112 @@ fun CalendarScreen(
     val parentCandidates = uiState.dayTasks.filter { it.isMainActivity }
     val isToday = uiState.currentDate == today()
 
-    if (isEditorVisible) {
-        TaskEditorDialog(
-            initialTask = editingTask,
-            defaultDate = uiState.currentDate,
-            parentCandidates = parentCandidates,
-            defaultStart = editorDefaultStart,
-            initialParentId = editorParentId,
-            initialType = editorInitialType,
-            onDismiss = {
-                isEditorVisible = false
-                editingTask = null
-                editorDefaultStart = null
-                editorParentId = null
-                editorInitialType = TaskType.POINT
-            },
-            onCreate = { parentId, title, description, date, type, start, end, isImportant ->
-                viewModel.createTask(parentId, title, description, date, type, start, end, isImportant)
-                isEditorVisible = false
-                editingTask = null
-                editorDefaultStart = null
-                editorParentId = null
-                editorInitialType = TaskType.POINT
-            },
-            onUpdate = { task ->
-                viewModel.updateTask(task)
-                isEditorVisible = false
-                editingTask = null
-                editorDefaultStart = null
-                editorParentId = null
-                editorInitialType = TaskType.POINT
-            }
-        )
+    fun resetEditorState() {
+        isEditorVisible = false
+        editingTask = null
+        editorDefaultStart = null
+        editorParentId = null
+        editorInitialType = TaskType.POINT
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        topBar = {
-            CalendarTopBar(
-                currentDate = uiState.currentDate,
-                onPrevious = viewModel::goToPrevious,
-                onNext = viewModel::goToNext,
-                onToday = viewModel::goToToday
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = {
-                editingTask = null
-                editorDefaultStart = null
-                editorParentId = null
-                editorInitialType = TaskType.POINT
-                isEditorVisible = true
-            }) {
-                Icon(imageVector = Icons.Filled.Add, contentDescription = null)
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            topBar = {
+                CalendarTopBar(
+                    currentDate = uiState.currentDate,
+                    onPrevious = viewModel::goToPrevious,
+                    onNext = viewModel::goToNext,
+                    onToday = viewModel::goToToday
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(onClick = {
+                    editingTask = null
+                    editorDefaultStart = null
+                    editorParentId = null
+                    editorInitialType = TaskType.POINT
+                    isEditorVisible = true
+                }) {
+                    Icon(imageVector = Icons.Filled.Add, contentDescription = null)
+                }
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .padding(horizontal = 16.dp)
+                    .fillMaxSize()
+            ) {
+                CalendarModeSelector(
+                    selectedMode = uiState.selectedMode,
+                    onModeSelected = viewModel::onModeSelected
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                when (uiState.selectedMode) {
+                    CalendarMode.DAY -> DayTimeline(
+                        tasks = uiState.dayTasks,
+                        isToday = isToday,
+                        onToggle = viewModel::onToggleTask,
+                        onAddFromSlot = { start ->
+                            editingTask = null
+                            editorDefaultStart = start
+                            editorParentId = null
+                            editorInitialType = TaskType.POINT
+                            isEditorVisible = true
+                        },
+                        onAddChild = { task ->
+                            editingTask = null
+                            editorParentId = task.id
+                            editorInitialType = TaskType.POINT
+                            editorDefaultStart = task.start
+                            isEditorVisible = true
+                        },
+                        onEdit = { task ->
+                            editingTask = task
+                            editorParentId = task.parentId
+                            editorInitialType = task.type
+                            editorDefaultStart = task.start
+                            isEditorVisible = true
+                        },
+                        onDelete = viewModel::onDeleteTask
+                    )
+                    CalendarMode.WEEK -> WeekView(
+                        currentDate = uiState.currentDate,
+                        weekTasks = uiState.weekTasks,
+                        onDayClick = viewModel::onDaySelected
+                    )
+                    CalendarMode.MONTH -> MonthView(
+                        currentDate = uiState.currentDate,
+                        monthTasks = uiState.monthTasks,
+                        onDayClick = viewModel::onDaySelected
+                    )
+                }
             }
         }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp)
-                .fillMaxSize()
-        ) {
-            CalendarModeSelector(
-                selectedMode = uiState.selectedMode,
-                onModeSelected = viewModel::onModeSelected
+
+        if (isEditorVisible) {
+            TaskEditorScreen(
+                initialTask = editingTask,
+                defaultDate = uiState.currentDate,
+                parentCandidates = parentCandidates,
+                defaultStart = editorDefaultStart,
+                initialParentId = editorParentId,
+                initialType = editorInitialType,
+                onDismiss = { resetEditorState() },
+                onCreate = { parentId, title, description, date, type, start, end, isImportant ->
+                    viewModel.createTask(parentId, title, description, date, type, start, end, isImportant)
+                    resetEditorState()
+                },
+                onUpdate = { task ->
+                    viewModel.updateTask(task)
+                    resetEditorState()
+                }
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            when (uiState.selectedMode) {
-                CalendarMode.DAY -> DayTimeline(
-                    date = uiState.currentDate,
-                    tasks = uiState.dayTasks,
-                    isToday = isToday,
-                    onToggle = viewModel::onToggleTask,
-                    onAddFromSlot = { start ->
-                        editorDefaultStart = start
-                        editorParentId = null
-                        editorInitialType = TaskType.POINT
-                        isEditorVisible = true
-                    },
-                    onAddChild = { task ->
-                        editingTask = null
-                        editorParentId = task.id
-                        editorInitialType = TaskType.POINT
-                        editorDefaultStart = task.start
-                        isEditorVisible = true
-                    },
-                    onEdit = { task ->
-                        editingTask = task
-                        editorParentId = task.parentId
-                        editorInitialType = task.type
-                        isEditorVisible = true
-                    },
-                    onDelete = viewModel::onDeleteTask
-                )
-                CalendarMode.WEEK -> WeekView(
-                    currentDate = uiState.currentDate,
-                    weekTasks = uiState.weekTasks,
-                    onDayClick = viewModel::onDaySelected
-                )
-                CalendarMode.MONTH -> MonthView(
-                    currentDate = uiState.currentDate,
-                    monthTasks = uiState.monthTasks,
-                    onDayClick = viewModel::onDaySelected
-                )
-            }
         }
     }
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CalendarTopBar(
     currentDate: LocalDate,
@@ -248,7 +246,6 @@ private fun CalendarTopBar(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CalendarModeSelector(
     selectedMode: CalendarMode,
@@ -271,10 +268,8 @@ private fun CalendarModeSelector(
         }
     }
 }
-
 @Composable
 private fun DayTimeline(
-    date: LocalDate,
     tasks: List<Task>,
     isToday: Boolean,
     onToggle: (Task, Boolean) -> Unit,
@@ -284,60 +279,64 @@ private fun DayTimeline(
     onDelete: (Task) -> Unit
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(isToday) {
+    val childTasks = remember(tasks) {
+        tasks.filter { it.parentId != null }.groupBy { requireNotNull(it.parentId) }
+    }
+    val topLevelTasks = remember(tasks) {
+        tasks.filter { it.parentId == null }
+            .sortedWith(compareBy<Task> { it.start }.thenBy { it.title })
+    }
+    val timelineItems = remember(topLevelTasks, childTasks) {
+        buildTimeline(topLevelTasks, childTasks)
+    }
+
+    LaunchedEffect(isToday, timelineItems) {
         if (isToday) {
             val currentHour = Clock.System.now()
                 .toLocalDateTime(TimeZone.currentSystemDefault()).time.hour
-            listState.scrollToItem(currentHour.coerceIn(0, 23))
+            val index = timelineItems.indexOfFirst { item ->
+                item is DayTimelineItem.TaskBlock && item.task.start.hour >= currentHour
+            }.takeIf { it >= 0 } ?: 0
+            listState.scrollToItem(index)
         }
     }
 
-    val mainActivities = tasks.filter { it.isMainActivity }.sortedBy { it.start }
-    val childTasks = tasks.filter { it.parentId != null }.groupBy { it.parentId }
-    val singleTasks = tasks.filter { it.parentId == null && it.type == TaskType.POINT }
-
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-        items((0 until 24).toList()) { hour ->
-            val hourTime = LocalTime(hour, 0)
-            val hourLabel = "%02d:00".format(hour)
-            val tasksAtHour = mainActivities.filter { it.start.hour == hour } +
-                    singleTasks.filter { it.start.hour == hour }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { onAddFromSlot(hourTime) }
-                    .padding(12.dp)
-            ) {
-                Text(text = hourLabel, style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                if (tasksAtHour.isEmpty()) {
-                    Text(
-                        text = stringResource(id = R.string.empty_slot_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    tasksAtHour.forEach { task ->
-                        when {
-                            task.isMainActivity -> MainActivityCard(
-                                task = task,
-                                children = childTasks[task.id].orEmpty(),
-                                onToggle = onToggle,
-                                onAddChild = onAddChild,
-                                onEdit = onEdit,
-                                onDelete = onDelete
-                            )
-                            else -> PointTaskChip(
-                                task = task,
-                                onToggle = onToggle,
-                                onEdit = onEdit,
-                                onDelete = onDelete
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(
+            items = timelineItems,
+            key = { item ->
+                when (item) {
+                    is DayTimelineItem.FreeTime -> "free-${item.start}-${item.endExclusive}"
+                    is DayTimelineItem.TaskBlock -> item.task.id
+                }
+            }
+        ) { item ->
+            when (item) {
+                is DayTimelineItem.FreeTime -> FreeTimeCard(
+                    freeTime = item,
+                    onAddTask = onAddFromSlot
+                )
+                is DayTimelineItem.TaskBlock -> {
+                    if (item.task.isMainActivity) {
+                        MainActivityCard(
+                            task = item.task,
+                            children = item.children,
+                            onToggle = onToggle,
+                            onAddChild = onAddChild,
+                            onEdit = onEdit,
+                            onDelete = onDelete
+                        )
+                    } else {
+                        PointTaskCard(
+                            task = item.task,
+                            onToggle = onToggle,
+                            onEdit = onEdit,
+                            onDelete = onDelete
+                        )
                     }
                 }
             }
@@ -345,6 +344,94 @@ private fun DayTimeline(
     }
 }
 
+@Composable
+private fun FreeTimeCard(
+    freeTime: DayTimelineItem.FreeTime,
+    onAddTask: (LocalTime) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 2.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onAddTask(freeTime.start) }
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(id = R.string.free_time_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            val endLabel = freeTime.endExclusive?.toTimeLabel()
+                ?: stringResource(id = R.string.free_time_until_end)
+            Text(
+                text = stringResource(
+                    id = R.string.free_time_range,
+                    freeTime.start.toTimeLabel(),
+                    endLabel
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(id = R.string.free_time_add),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+private sealed interface DayTimelineItem {
+    data class FreeTime(val start: LocalTime, val endExclusive: LocalTime?) : DayTimelineItem
+    data class TaskBlock(val task: Task, val children: List<Task>) : DayTimelineItem
+}
+
+private fun buildTimeline(
+    tasks: List<Task>,
+    childTasks: Map<String, List<Task>>
+): List<DayTimelineItem> {
+    if (tasks.isEmpty()) {
+        return listOf(DayTimelineItem.FreeTime(LocalTime(0, 0), null))
+    }
+    val result = mutableListOf<DayTimelineItem>()
+    var cursor = LocalTime(0, 0)
+    tasks.forEach { task ->
+        val start = task.start
+        if (cursor < start) {
+            result += DayTimelineItem.FreeTime(cursor, start)
+        }
+        result += DayTimelineItem.TaskBlock(
+            task = task,
+            children = childTasks[task.id].orEmpty().sortedBy { it.start }
+        )
+        val end = task.end ?: task.start
+        if (end > cursor) {
+            cursor = end
+        }
+    }
+    if (cursor < LocalTime(23, 59)) {
+        result += DayTimelineItem.FreeTime(cursor, null)
+    }
+    return result
+}
+
+private fun LocalTime.toTimeLabel(): String = "%02d:%02d".format(hour, minute)
+
+private fun timeRangeLabel(task: Task): String {
+    val endPart = task.end?.let { " - ${it.toTimeLabel()}" } ?: ""
+    return "${task.start.toTimeLabel()}$endPart"
+}
 @Composable
 private fun MainActivityCard(
     task: Task,
@@ -354,66 +441,72 @@ private fun MainActivityCard(
     onEdit: (Task) -> Unit,
     onDelete: (Task) -> Unit
 ) {
-    Surface(
-        tonalElevation = 6.dp,
-        shape = RoundedCornerShape(16.dp),
-        color = if (task.isDone) MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
-        else MaterialTheme.colorScheme.primaryContainer,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = task.isDone,
-                    onCheckedChange = { onToggle(task, it) }
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            tonalElevation = 6.dp,
+            shape = RoundedCornerShape(16.dp),
+            color = if (task.isDone) {
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.primaryContainer
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = task.isDone,
+                        onCheckedChange = { onToggle(task, it) }
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = task.title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        if (task.isImportant) {
-                            Icon(
-                                imageVector = Icons.Outlined.ErrorOutline,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(start = 4.dp)
-                            )
-                        }
+                        Text(
+                            text = timeRangeLabel(task),
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
+                    IconButton(onClick = { onAddChild(task) }) {
+                        Icon(imageVector = Icons.Outlined.TaskAlt, contentDescription = null)
+                    }
+                    IconButton(onClick = { onEdit(task) }) {
+                        Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
+                    }
+                    IconButton(onClick = { onDelete(task) }) {
+                        Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                    }
+                }
+                if (!task.description.isNullOrBlank()) {
                     Text(
-                        text = timeRangeLabel(task),
-                        style = MaterialTheme.typography.bodySmall
+                        text = task.description!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-                IconButton(onClick = { onAddChild(task) }) {
-                    Icon(imageVector = Icons.Outlined.TaskAlt, contentDescription = null)
-                }
-                IconButton(onClick = { onEdit(task) }) {
-                    Icon(imageVector = Icons.Filled.ArrowForward, contentDescription = null)
-                }
-                IconButton(onClick = { onDelete(task) }) {
-                    Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
-                }
-            }
-            if (!task.description.isNullOrBlank()) {
-                Text(
-                    text = task.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-            if (children.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    children.sortedBy { it.start }.forEach { child ->
-                        ChildTaskRow(task = child, onToggle = onToggle, onEdit = onEdit, onDelete = onDelete)
+                if (children.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        children.sortedBy { it.start }.forEach { child ->
+                            ChildTaskRow(
+                                task = child,
+                                onToggle = onToggle,
+                                onEdit = onEdit,
+                                onDelete = onDelete
+                            )
+                        }
                     }
                 }
             }
         }
+        ImportantBadge(
+            visible = task.isImportant,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-12).dp, y = 12.dp)
+        )
     }
 }
 
@@ -438,7 +531,7 @@ private fun ChildTaskRow(
             Text(text = timeRangeLabel(task), style = MaterialTheme.typography.bodySmall)
         }
         IconButton(onClick = { onEdit(task) }) {
-            Icon(imageVector = Icons.Filled.ArrowForward, contentDescription = null)
+            Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
         }
         IconButton(onClick = { onDelete(task) }) {
             Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
@@ -447,40 +540,62 @@ private fun ChildTaskRow(
 }
 
 @Composable
-private fun PointTaskChip(
+private fun PointTaskCard(
     task: Task,
     onToggle: (Task, Boolean) -> Unit,
     onEdit: (Task) -> Unit,
     onDelete: (Task) -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        tonalElevation = 4.dp,
-        color = if (task.isImportant) MaterialTheme.colorScheme.errorContainer
-        else MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .fillMaxWidth()
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            tonalElevation = 4.dp,
+            color = if (task.isImportant) {
+                MaterialTheme.colorScheme.errorContainer
+            } else {
+                MaterialTheme.colorScheme.secondaryContainer
+            },
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Checkbox(checked = task.isDone, onCheckedChange = { onToggle(task, it) })
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = task.title, style = MaterialTheme.typography.bodyMedium)
-                Text(text = task.start.toString(), style = MaterialTheme.typography.bodySmall)
-            }
-            IconButton(onClick = { onEdit(task) }) {
-                Icon(imageVector = Icons.Filled.ArrowForward, contentDescription = null)
-            }
-            IconButton(onClick = { onDelete(task) }) {
-                Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .fillMaxWidth()
+            ) {
+                Checkbox(checked = task.isDone, onCheckedChange = { onToggle(task, it) })
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = task.title, style = MaterialTheme.typography.bodyMedium)
+                    Text(text = timeRangeLabel(task), style = MaterialTheme.typography.bodySmall)
+                }
+                IconButton(onClick = { onEdit(task) }) {
+                    Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
+                }
+                IconButton(onClick = { onDelete(task) }) {
+                    Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                }
             }
         }
+        ImportantBadge(
+            visible = task.isImportant,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-12).dp, y = 8.dp)
+        )
     }
 }
 
+@Composable
+private fun ImportantBadge(
+    visible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    if (visible) {
+        Badge(modifier = modifier) {
+            Text(text = "!")
+        }
+    }
+}
 @Composable
 private fun WeekView(
     currentDate: LocalDate,
@@ -488,55 +603,82 @@ private fun WeekView(
     onDayClick: (LocalDate) -> Unit
 ) {
     val start = startOfWeek(currentDate)
-    val days: List<LocalDate> = remember(start) { (0..6).map { start.plus(DatePeriod(days = it)) } }
+    val days = remember(start) { (0..6).map { offset -> start.plus(DatePeriod(days = offset)) } }
+    val locale = Locale.getDefault()
+    val dateFormatter = remember(locale) {
+        DateTimeFormatter.ofPattern("EEEE, d MMMM", locale)
+    }
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(7),
+    LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(days) { date: LocalDate ->
-            val tasksForDay = weekTasks[date].orEmpty()
+        items(days) { date ->
+            val tasksForDay = weekTasks[date].orEmpty().sortedBy { it.start }
             val isToday = date == today()
+            val isSelected = date == currentDate
             Surface(
                 onClick = { onDayClick(date) },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(16.dp),
                 color = when {
-                    date == currentDate -> MaterialTheme.colorScheme.primaryContainer
+                    isSelected -> MaterialTheme.colorScheme.primaryContainer
                     isToday -> MaterialTheme.colorScheme.secondaryContainer
                     else -> MaterialTheme.colorScheme.surfaceVariant
                 },
-                modifier = Modifier
-                    .height(120.dp)
-                    .fillMaxWidth()
+                tonalElevation = if (isSelected || isToday) 4.dp else 1.dp,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "${date.dayOfMonth} ${date.month.name.take(3)}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    tasksForDay.take(3).forEach { task ->
-                        Text(
-                            text = "${task.start} • ${task.title}",
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1
-                        )
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val formatted = dateFormatter.format(date.toJavaLocalDate()).replaceFirstChar { char ->
+                        if (char.isLowerCase()) char.titlecase(locale) else char.toString()
                     }
-                    if (tasksForDay.size > 3) {
+                    Text(
+                        text = formatted,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (tasksForDay.isEmpty()) {
                         Text(
-                            text = stringResource(id = R.string.more_tasks, tasksForDay.size - 3),
-                            style = MaterialTheme.typography.labelSmall
+                            text = stringResource(id = R.string.free_time_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    } else {
+                        tasksForDay.take(4).forEach { task ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "${task.start.toTimeLabel()} • ${task.title}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                ImportantBadge(
+                                    visible = task.isImportant,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        }
+                        if (tasksForDay.size > 4) {
+                            Text(
+                                text = stringResource(id = R.string.more_tasks, tasksForDay.size - 4),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
                 }
             }
         }
     }
 }
-
 @Composable
 private fun MonthView(
     currentDate: LocalDate,
@@ -546,7 +688,7 @@ private fun MonthView(
     val yearMonth = remember(currentDate) { YearMonth.of(currentDate.year, currentDate.monthNumber) }
     val firstDay = LocalDate(currentDate.year, currentDate.monthNumber, 1)
     val firstDayOfWeek = startOfWeek(firstDay)
-    val days: List<LocalDate> = remember(currentDate) {
+    val days = remember(currentDate) {
         (0 until 42).map { offset -> firstDayOfWeek.plus(DatePeriod(days = offset)) }
     }
     LazyVerticalGrid(
@@ -555,8 +697,8 @@ private fun MonthView(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(days) { date: LocalDate ->
-            val isCurrentMonth = date.monthNumber == currentDate.monthNumber
+        items(days) { date ->
+            val isCurrentMonth = date.monthNumber == yearMonth.monthValue
             val tasksForDay = monthTasks[date].orEmpty()
             val hasImportant = tasksForDay.any { it.isImportant }
             Surface(
@@ -578,11 +720,19 @@ private fun MonthView(
                         .fillMaxSize(),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = date.dayOfMonth.toString(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isCurrentMonth) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = date.dayOfMonth.toString(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isCurrentMonth) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        ImportantBadge(visible = hasImportant)
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (tasksForDay.isNotEmpty()) {
                             BadgedBox(badge = {
@@ -591,23 +741,14 @@ private fun MonthView(
                                 Spacer(modifier = Modifier.height(0.dp))
                             }
                         }
-                        if (hasImportant) {
-                            Icon(
-                                imageVector = Icons.Outlined.ErrorOutline,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(start = 4.dp)
-                            )
-                        }
                     }
                 }
             }
         }
     }
 }
-
 @Composable
-private fun TaskEditorDialog(
+private fun TaskEditorScreen(
     initialTask: Task?,
     defaultDate: LocalDate,
     parentCandidates: List<Task>,
@@ -618,129 +759,182 @@ private fun TaskEditorDialog(
     onCreate: (String?, String, String?, LocalDate, TaskType, LocalTime, LocalTime?, Boolean) -> Unit,
     onUpdate: (Task) -> Unit
 ) {
-    val ctx = LocalContext.current
+    val context = LocalContext.current
 
     var title by rememberSaveable { mutableStateOf(initialTask?.title.orEmpty()) }
     var description by rememberSaveable { mutableStateOf(initialTask?.description.orEmpty()) }
     var dateInput by rememberSaveable { mutableStateOf((initialTask?.date ?: defaultDate).toString()) }
     var type by rememberSaveable { mutableStateOf(initialTask?.type ?: initialType) }
-    var startInput by rememberSaveable { mutableStateOf(initialTask?.start?.toString() ?: defaultStart?.toString().orEmpty()) }
-    var endInput by rememberSaveable { mutableStateOf(initialTask?.end?.toString().orEmpty()) }
-    var parentId by rememberSaveable { mutableStateOf(initialTask?.parentId ?: initialParentId) }
     var isImportant by rememberSaveable { mutableStateOf(initialTask?.isImportant ?: false) }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            Button(onClick = {
-                if (title.isBlank()) {
-                    errorMessage = ctx.getString(R.string.error_title_required)
-                    return@Button
-                }
-                val parsedDate = runCatching { LocalDate.parse(dateInput) }.getOrNull()
-                if (parsedDate == null) {
-                    errorMessage = ctx.getString(R.string.error_date_required)
-                    return@Button
-                }
-                val start = startInput.ifBlank { null }
-                val end = endInput.ifBlank { null }
-                val parsedStart = start?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
-                val parsedEnd = end?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
-                if (parsedStart == null) {
-                    errorMessage = ctx.getString(R.string.error_time_required)
-                    return@Button
-                }
-                if (type == TaskType.INTERVAL && parsedEnd == null) {
-                    errorMessage = ctx.getString(R.string.error_end_required)
-                    return@Button
-                }
-                if (initialTask == null) {
-                    onCreate(
-                        parentId,
-                        title,
-                        description.takeIf { it.isNotBlank() },
-                        parsedDate,
-                        type,
-                        parsedStart,
-                        parsedEnd,
-                        isImportant
-                    )
-                } else {
-                    onUpdate(
-                        initialTask.copy(
-                            title = title,
-                            description = description.takeIf { it.isNotBlank() },
-                            date = parsedDate,
-                            type = type,
-                            start = parsedStart,
-                            end = parsedEnd,
-                            parentId = parentId,
-                            isImportant = isImportant
+    val initialStart = remember(initialTask, defaultStart) {
+        initialTask?.start ?: defaultStart ?: LocalTime(9, 0)
+    }
+    val initialEndCandidate = remember(initialTask) {
+        initialTask?.end ?: defaultEndFor(initialStart)
+    }
+
+    var startHour by rememberSaveable { mutableIntStateOf(initialStart.hour) }
+    var startMinute by rememberSaveable { mutableIntStateOf(initialStart.minute) }
+    var endHour by rememberSaveable { mutableIntStateOf(initialEndCandidate.hour) }
+    var endMinute by rememberSaveable { mutableIntStateOf(initialEndCandidate.minute) }
+
+    val startTime = remember(startHour, startMinute) { LocalTime(startHour, startMinute) }
+    val endTime = remember(endHour, endMinute, type) {
+        if (type == TaskType.INTERVAL) LocalTime(endHour, endMinute) else null
+    }
+
+    LaunchedEffect(startTime, type) {
+        if (type == TaskType.INTERVAL) {
+            val currentEnd = LocalTime(endHour, endMinute)
+            if (currentEnd <= startTime) {
+                val adjusted = defaultEndFor(startTime)
+                endHour = adjusted.hour
+                endMinute = adjusted.minute
+            }
+        }
+    }
+
+    val resolvedParent = remember(
+        parentCandidates,
+        startTime,
+        endTime,
+        initialTask,
+        initialParentId
+    ) {
+        resolveParent(initialTask, initialParentId, parentCandidates, startTime, endTime)
+    }
+
+    fun handleSave() {
+        if (title.isBlank()) {
+            errorMessage = context.getString(R.string.error_title_required)
+            return
+        }
+        val parsedDate = runCatching { LocalDate.parse(dateInput) }.getOrNull()
+        if (parsedDate == null) {
+            errorMessage = context.getString(R.string.error_date_required)
+            return
+        }
+        val start = LocalTime(startHour, startMinute)
+        val end = if (type == TaskType.INTERVAL) LocalTime(endHour, endMinute) else null
+        if (type == TaskType.INTERVAL && end == null) {
+            errorMessage = context.getString(R.string.error_end_required)
+            return
+        }
+        val parentId = when {
+            initialTask?.parentId != null -> initialTask.parentId
+            initialParentId != null -> initialParentId
+            else -> resolvedParent?.id
+        }
+        errorMessage = null
+        val trimmedDescription = description.takeIf { it.isNotBlank() }
+        if (initialTask == null) {
+            onCreate(parentId, title, trimmedDescription, parsedDate, type, start, end, isImportant)
+        } else {
+            onUpdate(
+                initialTask.copy(
+                    title = title,
+                    description = trimmedDescription,
+                    date = parsedDate,
+                    type = type,
+                    start = start,
+                    end = end,
+                    parentId = parentId,
+                    isImportant = isImportant
+                )
+            )
+        }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        tonalElevation = 8.dp
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = if (initialTask == null) {
+                                stringResource(id = R.string.new_task)
+                            } else {
+                                stringResource(id = R.string.edit_task)
+                            }
                         )
-                    )
-                }
-            }) {
-                Text(text = stringResource(id = R.string.save))
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = null)
+                        }
+                    },
+                    actions = {
+                        TextButton(onClick = { handleSave() }) {
+                            Text(text = stringResource(id = R.string.save))
+                        }
+                    }
+                )
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(id = R.string.cancel))
-            }
-        },
-        title = {
-            Text(text = if (initialTask == null) stringResource(id = R.string.new_task) else stringResource(id = R.string.edit_task))
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .padding(horizontal = 16.dp, vertical = 24.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
                     label = { Text(text = stringResource(id = R.string.field_title)) },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text(text = stringResource(id = R.string.field_description)) }
+                    label = { Text(text = stringResource(id = R.string.field_description)) },
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = dateInput,
                     onValueChange = { dateInput = it },
                     label = { Text(text = stringResource(id = R.string.field_date)) },
-                    placeholder = { Text(text = "YYYY-MM-DD") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 TypeSelector(selected = type, onSelect = { type = it })
-                TimeField(
+                WheelTimePicker(
                     label = stringResource(id = R.string.field_start),
-                    value = startInput,
-                    onValueChange = { startInput = it }
+                    hour = startHour,
+                    minute = startMinute,
+                    onHourChanged = { startHour = it },
+                    onMinuteChanged = { startMinute = it }
                 )
                 AnimatedVisibility(visible = type == TaskType.INTERVAL, enter = fadeIn(), exit = fadeOut()) {
-                    TimeField(
+                    WheelTimePicker(
                         label = stringResource(id = R.string.field_end),
-                        value = endInput,
-                        onValueChange = { endInput = it }
+                        hour = endHour,
+                        minute = endMinute,
+                        onHourChanged = { endHour = it },
+                        onMinuteChanged = { endMinute = it }
                     )
                 }
                 ImportantSelector(isImportant = isImportant, onChanged = { isImportant = it })
-                ParentSelector(
-                    parentCandidates = parentCandidates,
-                    selectedParentId = parentId,
-                    onParentSelected = { parentId = it },
-                    initialTask = initialTask
-                )
+                AutoParentInfo(parent = resolvedParent)
                 if (errorMessage != null) {
-                    Text(text = errorMessage!!, color = MaterialTheme.colorScheme.error)
+                    Text(
+                        text = errorMessage!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
         }
-    )
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TypeSelector(selected: TaskType, onSelect: (TaskType) -> Unit) {
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -750,21 +944,16 @@ private fun TypeSelector(selected: TaskType, onSelect: (TaskType) -> Unit) {
                 onClick = { onSelect(type) },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = TaskType.values().size)
             ) {
-                Text(text = if (type == TaskType.POINT) stringResource(id = R.string.type_point) else stringResource(id = R.string.type_interval))
+                Text(
+                    text = if (type == TaskType.POINT) {
+                        stringResource(id = R.string.type_point)
+                    } else {
+                        stringResource(id = R.string.type_interval)
+                    }
+                )
             }
         }
     }
-}
-
-@Composable
-private fun TimeField(label: String, value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(text = label) },
-        placeholder = { Text(text = "HH:mm") },
-        singleLine = true
-    )
 }
 
 @Composable
@@ -776,37 +965,106 @@ private fun ImportantSelector(isImportant: Boolean, onChanged: (Boolean) -> Unit
 }
 
 @Composable
-private fun ParentSelector(
-    parentCandidates: List<Task>,
-    selectedParentId: String?,
-    onParentSelected: (String?) -> Unit,
-    initialTask: Task?
+private fun WheelTimePicker(
+    label: String,
+    hour: Int,
+    minute: Int,
+    onHourChanged: (Int) -> Unit,
+    onMinuteChanged: (Int) -> Unit
 ) {
-    val options = parentCandidates.filter { it.id != initialTask?.id }
-    Column {
-        Text(text = stringResource(id = R.string.field_parent))
-        Spacer(modifier = Modifier.height(4.dp))
-        AssistChip(
-            onClick = { onParentSelected(null) },
-            label = { Text(text = stringResource(id = R.string.no_parent)) },
-            colors = AssistChipDefaults.assistChipColors(
-                containerColor = if (selectedParentId == null) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = label, style = MaterialTheme.typography.titleSmall)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NumberWheel(
+                range = 0..23,
+                value = hour,
+                onValueChange = onHourChanged,
+                modifier = Modifier.width(80.dp)
             )
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        options.forEach { parent ->
-            AssistChip(
-                onClick = { onParentSelected(parent.id) },
-                label = { Text(text = parent.title) },
-                colors = AssistChipDefaults.assistChipColors(
-                    containerColor = if (selectedParentId == parent.id) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                )
+            Text(text = ":", style = MaterialTheme.typography.titleMedium)
+            NumberWheel(
+                range = 0..59,
+                value = minute,
+                onValueChange = onMinuteChanged,
+                modifier = Modifier.width(80.dp)
             )
         }
     }
 }
 
-private fun timeRangeLabel(task: Task): String {
-    val endPart = task.end?.let { " - $it" } ?: ""
-    return "${task.start}$endPart"
+@Composable
+private fun NumberWheel(
+    range: IntRange,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AndroidView(
+        modifier = modifier.height(120.dp),
+        factory = { context ->
+            NumberPicker(context).apply {
+                minValue = range.first
+                maxValue = range.last
+                this.value = value.coerceIn(range)
+                wrapSelectorWheel = true
+                descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+                setFormatter { "%02d".format(it) }
+                setOnValueChangedListener { _, _, newVal -> onValueChange(newVal) }
+            }
+        },
+        update = { picker ->
+            if (picker.minValue != range.first || picker.maxValue != range.last) {
+                picker.minValue = range.first
+                picker.maxValue = range.last
+            }
+            if (picker.value != value) {
+                picker.value = value.coerceIn(range)
+            }
+            picker.setFormatter { "%02d".format(it) }
+        }
+    )
+}
+
+@Composable
+private fun AutoParentInfo(parent: Task?) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = stringResource(id = R.string.auto_parent_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = stringResource(
+                id = R.string.auto_parent_label,
+                parent?.title ?: stringResource(id = R.string.auto_parent_none)
+            ),
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+private fun resolveParent(
+    initialTask: Task?,
+    initialParentId: String?,
+    parentCandidates: List<Task>,
+    start: LocalTime,
+    end: LocalTime?
+): Task? {
+    val explicitId = initialTask?.parentId ?: initialParentId
+    explicitId?.let { id ->
+        return parentCandidates.find { it.id == id }
+    }
+    val effectiveEnd = end ?: start
+    return parentCandidates.firstOrNull { parent ->
+        val parentEnd = parent.end ?: parent.start
+        parent.start <= start && parentEnd >= effectiveEnd
+    }
+}
+
+private fun defaultEndFor(start: LocalTime): LocalTime {
+    return if (start.hour == 23) {
+        if (start.minute >= 59) start else LocalTime(23, 59)
+    } else {
+        LocalTime((start.hour + 1).coerceAtMost(23), start.minute)
+    }
 }
