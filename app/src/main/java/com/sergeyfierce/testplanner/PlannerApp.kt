@@ -16,7 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.BorderStroke
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -58,55 +58,61 @@ fun PlannerApp(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            NavHost(
-                navController = navController,
-                startDestination = PlannerDestination.CALENDAR.route,
+    // ⬇️ Белый фон всего приложения
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color.Black,                 // фон приложения
+        contentColor = MaterialTheme.colorScheme.onBackground
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent // Scaffold прозрачный
+        ) { innerPadding ->
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = 104.dp)
+                    .padding(innerPadding)
             ) {
-                composable(PlannerDestination.CALENDAR.route) {
-                    val viewModel: CalendarViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
-                        factory = CalendarViewModelFactory(repository, preferencesRepository)
-                    )
-                    CalendarScreen(viewModel = viewModel)
-                }
-                composable(PlannerDestination.STATISTICS.route) {
-                    PlaceholderScreen(text = stringResource(id = R.string.statistics_placeholder))
-                }
-                composable(PlannerDestination.SETTINGS.route) {
-                    PlaceholderScreen(text = stringResource(id = R.string.settings_placeholder))
-                }
-            }
-
-            PlannerNavigationFab(
-                destinations = destinations,
-                currentDestination = currentRoute,
-                onDestinationSelected = { destination ->
-                    navController.navigate(destination.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
+                NavHost(
+                    navController = navController,
+                    startDestination = PlannerDestination.CALENDAR.route,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 104.dp)
+                ) {
+                    composable(PlannerDestination.CALENDAR.route) {
+                        val viewModel: CalendarViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                            factory = CalendarViewModelFactory(repository, preferencesRepository)
+                        )
+                        CalendarScreen(viewModel = viewModel)
                     }
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 24.dp)
-                    .navigationBarsPadding()
-            )
+                    composable(PlannerDestination.STATISTICS.route) {
+                        PlaceholderScreen(text = stringResource(id = R.string.statistics_placeholder))
+                    }
+                    composable(PlannerDestination.SETTINGS.route) {
+                        PlaceholderScreen(text = stringResource(id = R.string.settings_placeholder))
+                    }
+                }
+
+                PlannerNavigationFab(
+                    destinations = destinations,
+                    currentDestination = currentRoute,
+                    onDestinationSelected = { destination ->
+                        navController.navigate(destination.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 24.dp)
+                        .navigationBarsPadding()
+                )
+            }
         }
     }
 }
+
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -121,7 +127,9 @@ private fun PlannerNavigationFab(
         shape = MaterialTheme.shapes.extraLarge,
         tonalElevation = 8.dp,
         shadowElevation = 16.dp,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        border = null,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Row(
             modifier = Modifier

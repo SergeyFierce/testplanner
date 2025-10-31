@@ -48,7 +48,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
@@ -110,7 +109,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberInfiniteTransition
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -131,6 +130,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.children
@@ -241,6 +241,7 @@ fun CalendarScreen(
 
         Scaffold(
             modifier = Modifier.fillMaxSize(),
+            containerColor = Color.Transparent,
             snackbarHost = {},
             topBar = {
                 AnimatedContent(
@@ -460,7 +461,7 @@ fun CalendarScreen(
 
         CelebrationOverlay(
             visible = showCelebration && !isEditorVisible,
-            modifier = Modifier.matchParentSize()
+            modifier = Modifier.fillMaxSize()
         )
 
         SnackbarHost(
@@ -618,7 +619,7 @@ private fun CelebrationOverlay(
         modifier = modifier
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            ConfettiLayer(colors = palette, modifier = Modifier.matchParentSize())
+            ConfettiLayer(colors = palette, modifier = Modifier.fillMaxSize())
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -808,24 +809,39 @@ private fun AnimatedCalendarContent(
         transitionSpec = {
             val (initialMode, initialDate) = initialState
             val (targetMode, targetDate) = targetState
-            val slideSpec = tween<Int>(durationMillis = 320)
+            val slideSpec = tween<IntOffset>(durationMillis = 320)
             val fadeSpec = tween<Float>(durationMillis = 220)
+
             if (initialMode == targetMode) {
                 val comparison = targetDate.compareTo(initialDate)
                 if (comparison == 0) {
                     fadeIn(animationSpec = fadeSpec) togetherWith fadeOut(animationSpec = fadeSpec)
                 } else {
                     val direction = if (comparison > 0) 1 else -1
-                    (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it * direction }) + fadeIn(animationSpec = fadeSpec))
-                        .togetherWith(
-                            slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it * direction }) + fadeOut(animationSpec = fadeSpec)
+                    (
+                            slideInHorizontally(
+                                animationSpec = slideSpec,
+                                initialOffsetX = { fullWidth -> fullWidth * direction }
+                            ) + fadeIn(animationSpec = fadeSpec)
+                            ).togetherWith(
+                            slideOutHorizontally(
+                                animationSpec = slideSpec,
+                                targetOffsetX = { fullWidth -> -fullWidth * direction }
+                            ) + fadeOut(animationSpec = fadeSpec)
                         )
                 }
             } else {
                 val direction = if (targetMode.ordinal > initialMode.ordinal) 1 else -1
-                (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it * direction }) + fadeIn(animationSpec = fadeSpec))
-                    .togetherWith(
-                        slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it * direction }) + fadeOut(animationSpec = fadeSpec)
+                (
+                        slideInHorizontally(
+                            animationSpec = slideSpec,
+                            initialOffsetX = { fullWidth -> fullWidth * direction }
+                        ) + fadeIn(animationSpec = fadeSpec)
+                        ).togetherWith(
+                        slideOutHorizontally(
+                            animationSpec = slideSpec,
+                            targetOffsetX = { fullWidth -> -fullWidth * direction }
+                        ) + fadeOut(animationSpec = fadeSpec)
                     )
             }
         }, label = "calendar-mode-date"
