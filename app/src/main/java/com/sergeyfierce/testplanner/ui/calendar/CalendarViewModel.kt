@@ -6,6 +6,7 @@ import com.sergeyfierce.testplanner.data.TaskRepository
 import com.sergeyfierce.testplanner.data.preferences.CalendarPreferencesRepository
 import com.sergeyfierce.testplanner.domain.model.CalendarMode
 import com.sergeyfierce.testplanner.domain.model.Task
+import com.sergeyfierce.testplanner.domain.model.TaskRepeat
 import com.sergeyfierce.testplanner.domain.model.TaskType
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -155,11 +156,25 @@ class CalendarViewModel(
         type: TaskType,
         start: LocalTime,
         end: LocalTime?,
-        isImportant: Boolean
+        isImportant: Boolean,
+        reminderMinutesBefore: Int?,
+        repeat: TaskRepeat,
+        flexibleIntervalDays: Int?
     ) {
         viewModelScope.launch {
             runCatching {
-                repository.createTask(title, description, date, type, start, end, isImportant)
+                repository.createTask(
+                    title = title,
+                    description = description,
+                    date = date,
+                    type = type,
+                    start = start,
+                    end = end,
+                    isImportant = isImportant,
+                    reminderMinutesBefore = reminderMinutesBefore,
+                    repeat = repeat,
+                    flexibleIntervalDays = flexibleIntervalDays
+                )
             }
         }
     }

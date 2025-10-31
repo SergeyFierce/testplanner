@@ -22,6 +22,12 @@ data class TaskEntity(
     val end: String?,
     @ColumnInfo(name = "is_important")
     val isImportant: Boolean,
+    @ColumnInfo(name = "reminder_offset_minutes")
+    val reminderOffsetMinutes: Int?,
+    @ColumnInfo(name = "repeat_rule")
+    val repeatRule: String,
+    @ColumnInfo(name = "repeat_flexible_interval_days")
+    val repeatFlexibleIntervalDays: Int?,
     @ColumnInfo(name = "is_done")
     val isDone: Boolean,
     @ColumnInfo(name = "created_at")
