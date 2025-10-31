@@ -8,12 +8,22 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
@@ -21,6 +31,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -37,6 +48,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
@@ -98,6 +110,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberInfiniteTransition
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -107,6 +120,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -141,6 +155,7 @@ import kotlinx.datetime.toLocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
@@ -175,6 +190,7 @@ fun CalendarScreen(
         uiState.dayTasks.filter { selectedTaskIds.contains(it.id) }
     }
     val cannotEditMessage = stringResource(id = R.string.edit_completed_not_allowed)
+    val showCelebration = isToday && uiState.dayTasks.isNotEmpty() && uiState.dayTasks.all { it.isDone }
 
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = uiState.currentDate.toEpochMillis())
     var isDatePickerVisible by rememberSaveable { mutableStateOf(false) }
@@ -305,7 +321,9 @@ fun CalendarScreen(
                         FilledTonalButton(
                             onClick = viewModel::goToToday,
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                            modifier = Modifier.heightIn(min = 40.dp)
+                            modifier = Modifier
+                                .heightIn(min = 40.dp)
+                                .align(Alignment.CenterHorizontally)
                         ) {
                             Text(text = stringResource(id = R.string.go_to_today))
                         }
@@ -351,6 +369,7 @@ fun CalendarScreen(
 
                 AnimatedCalendarContent(
                     mode = uiState.selectedMode,
+                    currentDate = uiState.currentDate,
                     dayContent = {
                         DayTimeline(
                             tasks = uiState.dayTasks,
@@ -387,8 +406,36 @@ fun CalendarScreen(
 
         AnimatedVisibility(
             visible = isEditorVisible,
-            enter = slideInHorizontally(animationSpec = tween(durationMillis = 300)) { it } + fadeIn(),
-            exit = slideOutHorizontally(animationSpec = tween(durationMillis = 300)) { it } + fadeOut(),
+            enter = fadeIn(animationSpec = tween(durationMillis = 220)) +
+                expandVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
+                    expandFrom = Alignment.Bottom
+                ) +
+                scaleIn(
+                    initialScale = 0.9f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                ),
+            exit = fadeOut(animationSpec = tween(durationMillis = 260)) +
+                shrinkVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
+                    shrinkTowards = Alignment.Bottom
+                ) +
+                scaleOut(
+                    targetScale = 0.9f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                ),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             TaskEditorScreen(
@@ -411,11 +458,17 @@ fun CalendarScreen(
             )
         }
 
+        CelebrationOverlay(
+            visible = showCelebration && !isEditorVisible,
+            modifier = Modifier.matchParentSize()
+        )
+
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 16.dp)
+                .padding(bottom = 104.dp)
         )
 
         if (isDatePickerVisible) {
@@ -491,50 +544,177 @@ private fun CalendarTopBar(
     val dateShape = RoundedCornerShape(24.dp)
     TopAppBar(
         title = {
-            Column(
+            Box(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                contentAlignment = Alignment.Center
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Surface(
+                    onClick = onDateClick,
+                    shape = dateShape,
+                    tonalElevation = 2.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    IconButton(
-                        onClick = onPrevious,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(imageVector = Icons.Filled.KeyboardArrowLeft, contentDescription = null)
-                    }
-                    Surface(
-                        onClick = onDateClick,
-                        shape = dateShape,
-                        tonalElevation = 2.dp,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier
-                            .clip(dateShape)
-                    ) {
-                        Text(
-                            text = formatter.format(currentDate.toJavaLocalDate()),
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    IconButton(
-                        onClick = onNext,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = null)
-                    }
+                    Text(
+                        text = formatter.format(currentDate.toJavaLocalDate()),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         },
-        actions = {},
-        navigationIcon = {},
+        navigationIcon = {
+            IconButton(
+                onClick = onPrevious,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(imageVector = Icons.Filled.KeyboardArrowLeft, contentDescription = null)
+            }
+        },
+        actions = {
+            IconButton(
+                onClick = onNext,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(imageVector = Icons.Filled.KeyboardArrowRight, contentDescription = null)
+            }
+        },
         windowInsets = WindowInsets(0, 0, 0, 0)
     )
+}
+
+private data class ConfettiParticle(
+    val baseX: Float,
+    val speedMultiplier: Float,
+    val phaseOffset: Float,
+    val sizeMultiplier: Float,
+    val color: Color
+)
+
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+private fun CelebrationOverlay(
+    visible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val palette = listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.secondary,
+        MaterialTheme.colorScheme.tertiary,
+        MaterialTheme.colorScheme.inversePrimary
+    )
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(animationSpec = tween(durationMillis = 300)) +
+            scaleIn(
+                initialScale = 0.96f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            ),
+        exit = fadeOut(animationSpec = tween(durationMillis = 500)),
+        modifier = modifier
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            ConfettiLayer(colors = palette, modifier = Modifier.matchParentSize())
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    tonalElevation = 12.dp,
+                    shadowElevation = 18.dp,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CalendarToday,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = stringResource(id = R.string.celebration_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = stringResource(id = R.string.celebration_message),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfettiLayer(
+    colors: List<Color>,
+    modifier: Modifier = Modifier,
+    particleCount: Int = 56
+) {
+    val particles = remember(colors, particleCount) {
+        List(particleCount) { index ->
+            ConfettiParticle(
+                baseX = Random.nextFloat(),
+                speedMultiplier = Random.nextFloat().coerceAtLeast(0.35f),
+                phaseOffset = Random.nextFloat(),
+                sizeMultiplier = Random.nextFloat().coerceIn(0.6f, 1.2f),
+                color = colors[index % colors.size]
+            )
+        }
+    }
+    val transition = rememberInfiniteTransition(label = "confetti-transition")
+    val fallProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "confetti-fall"
+    )
+    val swayProgress by transition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "confetti-sway"
+    )
+
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val width = size.width
+        val height = size.height
+        val baseRadius = 6.dp.toPx()
+        particles.forEach { particle ->
+            val vertical = normalizeFraction(fallProgress * particle.speedMultiplier + particle.phaseOffset)
+            val horizontal = normalizeFraction(particle.baseX + swayProgress * 0.05f + vertical * 0.1f)
+            drawCircle(
+                color = particle.color.copy(alpha = 0.85f),
+                radius = baseRadius * particle.sizeMultiplier,
+                center = Offset(horizontal * width, vertical * height)
+            )
+        }
+    }
+}
+
+private fun normalizeFraction(value: Float): Float {
+    val remainder = value % 1f
+    return if (remainder < 0f) remainder + 1f else remainder
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -618,21 +798,39 @@ private fun CalendarModeSelector(
 @Composable
 private fun AnimatedCalendarContent(
     mode: CalendarMode,
+    currentDate: LocalDate,
     dayContent: @Composable () -> Unit,
     weekContent: @Composable () -> Unit,
     monthContent: @Composable () -> Unit
 ) {
     AnimatedContent(
-        targetState = mode,
+        targetState = mode to currentDate,
         transitionSpec = {
-            val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
-            (slideInHorizontally(animationSpec = tween(), initialOffsetX = { it * direction }) + fadeIn())
-                .togetherWith(
-                    slideOutHorizontally(animationSpec = tween(), targetOffsetX = { -it * direction }) + fadeOut()
-                )
-        }, label = "calendar-mode"
-    ) { state ->
-        when (state) {
+            val (initialMode, initialDate) = initialState
+            val (targetMode, targetDate) = targetState
+            val slideSpec = tween<Int>(durationMillis = 320)
+            val fadeSpec = tween<Float>(durationMillis = 220)
+            if (initialMode == targetMode) {
+                val comparison = targetDate.compareTo(initialDate)
+                if (comparison == 0) {
+                    fadeIn(animationSpec = fadeSpec) togetherWith fadeOut(animationSpec = fadeSpec)
+                } else {
+                    val direction = if (comparison > 0) 1 else -1
+                    (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it * direction }) + fadeIn(animationSpec = fadeSpec))
+                        .togetherWith(
+                            slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it * direction }) + fadeOut(animationSpec = fadeSpec)
+                        )
+                }
+            } else {
+                val direction = if (targetMode.ordinal > initialMode.ordinal) 1 else -1
+                (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it * direction }) + fadeIn(animationSpec = fadeSpec))
+                    .togetherWith(
+                        slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it * direction }) + fadeOut(animationSpec = fadeSpec)
+                    )
+            }
+        }, label = "calendar-mode-date"
+    ) { (stateMode, _) ->
+        when (stateMode) {
             CalendarMode.DAY -> dayContent()
             CalendarMode.WEEK -> weekContent()
             CalendarMode.MONTH -> monthContent()
