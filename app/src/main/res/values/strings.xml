@@ -56,4 +56,6 @@
     <string name="unsaved_changes_message">Вы внесли изменения. Сохранить их перед выходом?</string>
     <string name="statistics_placeholder">Раздел в разработке. В будущем здесь появится аналитика и графики выполнения дня.</string>
     <string name="settings_placeholder">Раздел в разработке. Здесь можно будет изменить тему, уведомления и параметры интерфейса.</string>
+    <string name="celebration_title">Отличная работа!</string>
+    <string name="celebration_message">Все задачи на сегодня выполнены</string>
 </resources>
