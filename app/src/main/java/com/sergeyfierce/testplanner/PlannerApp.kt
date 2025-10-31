@@ -58,14 +58,13 @@ fun PlannerApp(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
-    // ⬇️ Белый фон всего приложения
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = Color.Black,                 // фон приложения
+        color = Color.Black,
         contentColor = MaterialTheme.colorScheme.onBackground
     ) {
         Scaffold(
-            containerColor = Color.Transparent // Scaffold прозрачный
+            containerColor = Color.Transparent
         ) { innerPadding ->
             Box(
                 modifier = Modifier
@@ -75,9 +74,7 @@ fun PlannerApp(
                 NavHost(
                     navController = navController,
                     startDestination = PlannerDestination.CALENDAR.route,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 104.dp)
+                    modifier = Modifier.fillMaxSize() // ⬅ без .padding(bottom = …)
                 ) {
                     composable(PlannerDestination.CALENDAR.route) {
                         val viewModel: CalendarViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
@@ -105,14 +102,12 @@ fun PlannerApp(
                     },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 24.dp)
                         .navigationBarsPadding()
                 )
             }
         }
     }
 }
-
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -132,8 +127,7 @@ private fun PlannerNavigationFab(
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Row(
-            modifier = Modifier
-                .padding(horizontal = 20.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -168,16 +162,8 @@ private fun NavigationFabItem(
         PlannerDestination.STATISTICS -> Icons.Outlined.BarChart
         PlannerDestination.SETTINGS -> Icons.Outlined.Settings
     }
-    val indicatorColor = if (selected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-    } else {
-        Color.Transparent
-    }
-    val contentColor = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val indicatorColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
+    val contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
 
     Surface(
         onClick = onClick,
@@ -197,11 +183,7 @@ private fun NavigationFabItem(
                 enter = fadeIn() + expandHorizontally(),
                 exit = fadeOut() + shrinkHorizontally()
             ) {
-                Text(
-                    text = label,
-                    color = contentColor,
-                    style = MaterialTheme.typography.labelLarge
-                )
+                Text(text = label, color = contentColor, style = MaterialTheme.typography.labelLarge)
             }
         }
     }

@@ -109,6 +109,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -293,14 +294,20 @@ fun CalendarScreen(
             },
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             floatingActionButton = {
-                FloatingActionButton(onClick = {
-                    selectedTaskIds = emptySet()
-                    isSelectionModeActive = false
-                    editingTask = null
-                    editorDefaultStart = null
-                    editorInitialType = TaskType.POINT
-                    isEditorVisible = true
-                }) {
+                val bottomBarReserve = 96.dp // можно подстроить на 88–104.dp под вкус
+
+                FloatingActionButton(
+                    onClick = {
+                        selectedTaskIds = emptySet()
+                        isSelectionModeActive = false
+                        editingTask = null
+                        editorDefaultStart = null
+                        editorInitialType = TaskType.POINT
+                        isEditorVisible = true
+                    },
+                    modifier = Modifier
+                        .padding(bottom = bottomBarReserve) // ⬅ вместо navigationBarsPadding()
+                ) {
                     Icon(imageVector = Icons.Filled.Add, contentDescription = null)
                 }
             }
@@ -462,7 +469,7 @@ fun CalendarScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 16.dp)
-                .padding(bottom = 104.dp)
+                .padding(bottom = 80.dp)
         )
 
         if (isDatePickerVisible) {
@@ -747,7 +754,7 @@ private fun DayTimeline(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 96.dp)
+        contentPadding = PaddingValues(bottom = 0.dp)
     ) {
         items(
             items = timelineItems,
