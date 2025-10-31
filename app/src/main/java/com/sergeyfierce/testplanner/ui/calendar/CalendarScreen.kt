@@ -10,13 +10,12 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -401,19 +400,19 @@ fun CalendarScreen(
         AnimatedVisibility(
             visible = isEditorVisible,
             enter = slideInVertically(
-                initialOffsetY = { fullHeight -> fullHeight / 2 },
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessLow
+                initialOffsetY = { it },
+                animationSpec = tween(
+                    durationMillis = 260,
+                    easing = FastOutSlowInEasing
                 )
             ) + fadeIn(animationSpec = tween(durationMillis = 200)),
             exit = slideOutVertically(
-                targetOffsetY = { fullHeight -> fullHeight / 2 },
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMedium
+                targetOffsetY = { it },
+                animationSpec = tween(
+                    durationMillis = 220,
+                    easing = FastOutSlowInEasing
                 )
-            ) + fadeOut(animationSpec = tween(durationMillis = 180)),
+            ) + fadeOut(animationSpec = tween(durationMillis = 200)),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             TaskEditorScreen(
@@ -579,22 +578,6 @@ private fun SelectionTopBar(
             }
         },
         actions = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Checkbox(
-                    checked = allSelected && selectedCount > 0,
-                    onCheckedChange = { onToggleSelectAll() },
-                    enabled = hasSelectableTasks
-                )
-                val label = if (allSelected && selectedCount > 0) {
-                    stringResource(id = R.string.action_clear_selection)
-                } else {
-                    stringResource(id = R.string.action_select_all)
-                }
-                Text(text = label)
-            }
             if (selectedCount == 1) {
                 IconButton(onClick = onEdit, enabled = canEdit) {
                     Icon(imageVector = Icons.Filled.Edit, contentDescription = stringResource(id = R.string.edit_task))
@@ -604,6 +587,11 @@ private fun SelectionTopBar(
                 IconButton(onClick = onDelete) {
                     Icon(imageVector = Icons.Outlined.Delete, contentDescription = stringResource(id = R.string.action_delete))
                 }
+                Checkbox(
+                    checked = allSelected && selectedCount > 0,
+                    onCheckedChange = { onToggleSelectAll() },
+                    enabled = hasSelectableTasks
+                )
             }
         },
         windowInsets = WindowInsets(0, 0, 0, 0)
@@ -1414,15 +1402,21 @@ private fun TaskEditorScreen(
     onUpdate: (Task) -> Unit
 ) {
     val context = LocalContext.current
+    val sessionKey = listOf(
+        initialTask?.id ?: "new",
+        defaultDate.toString(),
+        defaultStart?.toString() ?: "none",
+        initialType.name
+    ).joinToString(separator = "|")
 
-    var title by rememberSaveable { mutableStateOf(initialTask?.title.orEmpty()) }
-    var description by rememberSaveable { mutableStateOf(initialTask?.description.orEmpty()) }
-    var type by rememberSaveable { mutableStateOf(initialTask?.type ?: initialType) }
-    var isImportant by rememberSaveable { mutableStateOf(initialTask?.isImportant ?: false) }
-    var saveError by rememberSaveable { mutableStateOf<String?>(null) }
-    var showDiscardDialog by rememberSaveable { mutableStateOf(false) }
+    var title by rememberSaveable(sessionKey) { mutableStateOf(initialTask?.title.orEmpty()) }
+    var description by rememberSaveable(sessionKey) { mutableStateOf(initialTask?.description.orEmpty()) }
+    var type by rememberSaveable(sessionKey) { mutableStateOf(initialTask?.type ?: initialType) }
+    var isImportant by rememberSaveable(sessionKey) { mutableStateOf(initialTask?.isImportant ?: false) }
+    var saveError by rememberSaveable(sessionKey) { mutableStateOf<String?>(null) }
+    var showDiscardDialog by rememberSaveable(sessionKey) { mutableStateOf(false) }
 
-    var selectedDate by rememberSaveable(stateSaver = LocalDateSaver) {
+    var selectedDate by rememberSaveable(sessionKey, stateSaver = LocalDateSaver) {
         mutableStateOf(initialTask?.date ?: defaultDate)
     }
 
@@ -1430,14 +1424,14 @@ private fun TaskEditorScreen(
         val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).time
         LocalTime(now.hour, now.minute)
     }
-    val initialStart = remember(initialTask, defaultStart, nowTime) {
+    val initialStart = remember(sessionKey) {
         initialTask?.start ?: defaultStart ?: nowTime
     }
-    val initialEndCandidate = remember(initialTask, initialStart) {
+    val initialEndCandidate = remember(sessionKey, initialStart) {
         initialTask?.end ?: defaultEndFor(initialStart)
     }
 
-    val initialSnapshot = remember(initialTask, defaultDate, initialStart, initialEndCandidate, initialType) {
+    val initialSnapshot = remember(sessionKey, initialTask, defaultDate, initialStart, initialEndCandidate, initialType) {
         EditorSnapshot(
             title = initialTask?.title.orEmpty(),
             description = initialTask?.description.orEmpty(),
@@ -1458,10 +1452,10 @@ private fun TaskEditorScreen(
         }
     }
 
-    var startHour by rememberSaveable { mutableIntStateOf(initialStart.hour) }
-    var startMinute by rememberSaveable { mutableIntStateOf(initialStart.minute) }
-    var endHour by rememberSaveable { mutableIntStateOf(initialEndCandidate.hour) }
-    var endMinute by rememberSaveable { mutableIntStateOf(initialEndCandidate.minute) }
+    var startHour by rememberSaveable(sessionKey) { mutableIntStateOf(initialStart.hour) }
+    var startMinute by rememberSaveable(sessionKey) { mutableIntStateOf(initialStart.minute) }
+    var endHour by rememberSaveable(sessionKey) { mutableIntStateOf(initialEndCandidate.hour) }
+    var endMinute by rememberSaveable(sessionKey) { mutableIntStateOf(initialEndCandidate.minute) }
 
     val startTime = remember(startHour, startMinute) { LocalTime(startHour, startMinute) }
     val endTime = remember(endHour, endMinute, type) {
@@ -1513,7 +1507,7 @@ private fun TaskEditorScreen(
         }
     }
 
-    var scheduleError by remember { mutableStateOf<String?>(null) }
+    var scheduleError by remember(sessionKey) { mutableStateOf<String?>(null) }
     LaunchedEffect(selectedDate, type, startTime, endTime) {
         scheduleError = if (type == TaskType.INTERVAL && endTime == null) {
             context.getString(R.string.error_end_required)
@@ -1532,7 +1526,7 @@ private fun TaskEditorScreen(
         DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.getDefault())
     }
 
-    var isDatePickerVisible by rememberSaveable { mutableStateOf(false) }
+    var isDatePickerVisible by rememberSaveable(sessionKey) { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate.toEpochMillis())
 
     LaunchedEffect(selectedDate) {
@@ -1661,18 +1655,23 @@ private fun TaskEditorScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Filled.CalendarToday, contentDescription = null)
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = stringResource(id = R.string.field_date),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Text(
-                                text = dateFormatter.format(selectedDate.toJavaLocalDate()),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(imageVector = Icons.Filled.CalendarToday, contentDescription = null)
+                                Text(
+                                    text = dateFormatter.format(selectedDate.toJavaLocalDate()),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
                     }
                 }
