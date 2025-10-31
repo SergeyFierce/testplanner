@@ -5,42 +5,31 @@ import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Icon
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.CircleShape
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -68,7 +57,6 @@ fun PlannerApp(
     val destinations = listOf(PlannerDestination.CALENDAR, PlannerDestination.STATISTICS, PlannerDestination.SETTINGS)
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    var addTaskAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     // ⬇️ Белый фон всего приложения
     Surface(
@@ -95,10 +83,7 @@ fun PlannerApp(
                         val viewModel: CalendarViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
                             factory = CalendarViewModelFactory(repository, preferencesRepository)
                         )
-                        CalendarScreen(
-                            viewModel = viewModel,
-                            onAddTaskActionChange = { addTaskAction = it }
-                        )
+                        CalendarScreen(viewModel = viewModel)
                     }
                     composable(PlannerDestination.STATISTICS.route) {
                         PlaceholderScreen(text = stringResource(id = R.string.statistics_placeholder))
@@ -118,7 +103,6 @@ fun PlannerApp(
                             restoreState = true
                         }
                     },
-                    onAddClick = addTaskAction,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 24.dp)
@@ -136,62 +120,30 @@ private fun PlannerNavigationFab(
     destinations: List<PlannerDestination>,
     currentDestination: String?,
     onDestinationSelected: (PlannerDestination) -> Unit,
-    onAddClick: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier, contentAlignment = Alignment.BottomCenter) {
-        Surface(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            shape = MaterialTheme.shapes.extraLarge,
-            tonalElevation = 8.dp,
-            shadowElevation = 16.dp,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-            border = null,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ) {
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                destinations.forEach { destination ->
-                    val selected = currentDestination == destination.route
-                    NavigationFabItem(
-                        destination = destination,
-                        selected = selected,
-                        onClick = { onDestinationSelected(destination) }
-                    )
-                }
-            }
-        }
-
-        val addClick = onAddClick
-        AnimatedVisibility(
-            visible = addClick != null,
-            enter = fadeIn() + scaleIn(),
-            exit = fadeOut() + scaleOut(),
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.extraLarge,
+        tonalElevation = 8.dp,
+        shadowElevation = 16.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        border = null,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Row(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(y = (-32).dp)
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            addClick?.let { click ->
-                FloatingActionButton(
-                    onClick = click,
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 6.dp,
-                        pressedElevation = 10.dp
-                    ),
-                    modifier = Modifier.shadow(16.dp, CircleShape, clip = false)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = stringResource(id = R.string.new_task)
-                    )
-                }
+            destinations.forEach { destination ->
+                val selected = currentDestination == destination.route
+                NavigationFabItem(
+                    destination = destination,
+                    selected = selected,
+                    onClick = { onDestinationSelected(destination) }
+                )
             }
         }
     }
