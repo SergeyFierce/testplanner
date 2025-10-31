@@ -17,14 +17,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -382,12 +376,6 @@ fun CalendarScreen(
                             isToday = isToday,
                             onToggle = if (isSelectionMode) null else viewModel::onToggleTask,
                             selectedTaskIds = selectedTaskIds,
-                            onAddFromSlot = { start ->
-                                editingTask = null
-                                editorDefaultStart = start
-                                editorInitialType = TaskType.POINT
-                                isEditorVisible = true
-                            },
                             onTaskClick = { task -> handleTaskClick(task) },
                             onTaskLongPress = { task -> handleTaskLongPress(task) }
                         )
@@ -412,36 +400,20 @@ fun CalendarScreen(
 
         AnimatedVisibility(
             visible = isEditorVisible,
-            enter = fadeIn(animationSpec = tween(durationMillis = 220)) +
-                expandVertically(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    ),
-                    expandFrom = Alignment.Bottom
-                ) +
-                scaleIn(
-                    initialScale = 0.9f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                ),
-            exit = fadeOut(animationSpec = tween(durationMillis = 260)) +
-                shrinkVertically(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessLow
-                    ),
-                    shrinkTowards = Alignment.Bottom
-                ) +
-                scaleOut(
-                    targetScale = 0.9f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                ),
+            enter = slideInVertically(
+                initialOffsetY = { fullHeight -> fullHeight / 2 },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            ) + fadeIn(animationSpec = tween(durationMillis = 200)),
+            exit = slideOutVertically(
+                targetOffsetY = { fullHeight -> fullHeight / 2 },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ) + fadeOut(animationSpec = tween(durationMillis = 180)),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             TaskEditorScreen(
@@ -727,7 +699,6 @@ private fun DayTimeline(
     isToday: Boolean,
     onToggle: ((Task, Boolean) -> Unit)?,
     selectedTaskIds: Set<String>,
-    onAddFromSlot: (LocalTime) -> Unit,
     onTaskClick: (Task) -> Unit,
     onTaskLongPress: (Task) -> Unit
 ) {
@@ -771,8 +742,7 @@ private fun DayTimeline(
             when (item) {
                 is DayTimelineItem.FreeTime -> Box(modifier = placementModifier) {
                     FreeTimeCard(
-                        freeTime = item,
-                        onAddTask = onAddFromSlot
+                        freeTime = item
                     )
                 }
                 is DayTimelineItem.TaskBlock -> {
@@ -809,8 +779,7 @@ private fun DayTimeline(
 
 @Composable
 private fun FreeTimeCard(
-    freeTime: DayTimelineItem.FreeTime,
-    onAddTask: (LocalTime) -> Unit
+    freeTime: DayTimelineItem.FreeTime
 ) {
     val shape = RoundedCornerShape(16.dp)
     Surface(
@@ -819,7 +788,6 @@ private fun FreeTimeCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .clickable { onAddTask(freeTime.start) }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             val isWholeDay = freeTime.start == LocalTime(0, 0) && freeTime.endExclusive == null
@@ -1532,8 +1500,8 @@ private fun TaskEditorScreen(
         }
     }
 
-    LaunchedEffect(selectedDate, type, endHour, endMinute, startTime, currentRealTime) {
-        if (type == TaskType.INTERVAL && selectedDate == today()) {
+    LaunchedEffect(selectedDate, type, endHour, endMinute, startTime, currentRealTime, initialTask) {
+        if (initialTask == null && type == TaskType.INTERVAL && selectedDate == today()) {
             val nowLimit = currentRealTime
             val currentEnd = LocalTime(endHour, endMinute)
             if (currentEnd <= nowLimit) {

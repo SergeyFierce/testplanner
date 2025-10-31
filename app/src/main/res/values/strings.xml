@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Testplanner</string>
     <string name="today">Сегодня</string>
-    <string name="go_to_today">Перейти на сегодняшнюю дату</string>
+    <string name="go_to_today">Вернуться на сегодняшнюю дату</string>
     <string name="mode_day">День</string>
     <string name="mode_week">Неделя</string>
     <string name="mode_month">Месяц</string>
