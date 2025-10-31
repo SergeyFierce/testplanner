@@ -12,6 +12,9 @@ data class Task(
     val start: LocalTime,
     val end: LocalTime?,
     val isImportant: Boolean,
+    val reminderMinutesBefore: Int? = null,
+    val repeat: TaskRepeat = TaskRepeat.NONE,
+    val repeatFlexibleIntervalDays: Int? = null,
     val isDone: Boolean,
     val createdAt: String,
     val updatedAt: String

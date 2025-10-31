@@ -8,6 +8,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -71,7 +72,9 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -88,6 +91,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -137,6 +141,7 @@ import androidx.core.view.children
 import com.sergeyfierce.testplanner.R
 import com.sergeyfierce.testplanner.domain.model.CalendarMode
 import com.sergeyfierce.testplanner.domain.model.Task
+import com.sergeyfierce.testplanner.domain.model.TaskRepeat
 import com.sergeyfierce.testplanner.domain.model.TaskType
 import com.sergeyfierce.testplanner.ui.theme.TaskDoneGreen
 import com.sergeyfierce.testplanner.ui.theme.TaskDoneNestedGreen
@@ -155,6 +160,8 @@ import kotlinx.datetime.toLocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
@@ -178,6 +185,7 @@ fun CalendarScreen(
     var editingTask by remember { mutableStateOf<Task?>(null) }
     var editorDefaultStart by remember { mutableStateOf<LocalTime?>(null) }
     var editorInitialType by remember { mutableStateOf(TaskType.POINT) }
+    var editorSessionKey by remember { mutableIntStateOf(0) }
     var selectedTaskIds by remember { mutableStateOf(setOf<String>()) }
     var isSelectionModeActive by rememberSaveable { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -209,6 +217,7 @@ fun CalendarScreen(
         editingTask = task
         editorInitialType = task.type
         editorDefaultStart = task.start
+        editorSessionKey++
         isEditorVisible = true
     }
 
@@ -303,6 +312,7 @@ fun CalendarScreen(
                         editingTask = null
                         editorDefaultStart = null
                         editorInitialType = TaskType.POINT
+                        editorSessionKey++
                         isEditorVisible = true
                     },
                     modifier = Modifier
@@ -382,12 +392,6 @@ fun CalendarScreen(
                             isToday = isToday,
                             onToggle = if (isSelectionMode) null else viewModel::onToggleTask,
                             selectedTaskIds = selectedTaskIds,
-                            onAddFromSlot = { start ->
-                                editingTask = null
-                                editorDefaultStart = start
-                                editorInitialType = TaskType.POINT
-                                isEditorVisible = true
-                            },
                             onTaskClick = { task -> handleTaskClick(task) },
                             onTaskLongPress = { task -> handleTaskLongPress(task) }
                         )
@@ -412,39 +416,21 @@ fun CalendarScreen(
 
         AnimatedVisibility(
             visible = isEditorVisible,
-            enter = fadeIn(animationSpec = tween(durationMillis = 220)) +
-                expandVertically(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    ),
-                    expandFrom = Alignment.Bottom
-                ) +
-                scaleIn(
-                    initialScale = 0.9f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                ),
-            exit = fadeOut(animationSpec = tween(durationMillis = 260)) +
-                shrinkVertically(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessLow
-                    ),
-                    shrinkTowards = Alignment.Bottom
-                ) +
-                scaleOut(
-                    targetScale = 0.9f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                ),
+            enter = slideInVertically(
+                initialOffsetY = { fullHeight -> fullHeight },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            ) + fadeIn(animationSpec = tween(durationMillis = 200)),
+            exit = slideOutVertically(
+                targetOffsetY = { fullHeight -> fullHeight },
+                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(durationMillis = 180)),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             TaskEditorScreen(
+                sessionKey = editorSessionKey,
                 initialTask = editingTask,
                 defaultDate = uiState.currentDate,
                 defaultStart = editorDefaultStart,
@@ -453,8 +439,19 @@ fun CalendarScreen(
                     viewModel.validateSchedule(id, date, type, start, end)
                 },
                 onDismiss = { resetEditorState() },
-                onCreate = { title, description, date, type, start, end, isImportant ->
-                    viewModel.createTask(title, description, date, type, start, end, isImportant)
+                onCreate = { title, description, date, type, start, end, isImportant, reminder, repeat, flexibleInterval ->
+                    viewModel.createTask(
+                        title = title,
+                        description = description,
+                        date = date,
+                        type = type,
+                        start = start,
+                        end = end,
+                        isImportant = isImportant,
+                        reminderMinutesBefore = reminder,
+                        repeat = repeat,
+                        flexibleIntervalDays = flexibleInterval
+                    )
                     resetEditorState()
                 },
                 onUpdate = { task ->
@@ -727,7 +724,6 @@ private fun DayTimeline(
     isToday: Boolean,
     onToggle: ((Task, Boolean) -> Unit)?,
     selectedTaskIds: Set<String>,
-    onAddFromSlot: (LocalTime) -> Unit,
     onTaskClick: (Task) -> Unit,
     onTaskLongPress: (Task) -> Unit
 ) {
@@ -770,10 +766,7 @@ private fun DayTimeline(
                 .animateItemPlacement(animationSpec = tween(durationMillis = 300))
             when (item) {
                 is DayTimelineItem.FreeTime -> Box(modifier = placementModifier) {
-                    FreeTimeCard(
-                        freeTime = item,
-                        onAddTask = onAddFromSlot
-                    )
+                    FreeTimeCard(freeTime = item)
                 }
                 is DayTimelineItem.TaskBlock -> {
                     Box(modifier = placementModifier) {
@@ -809,8 +802,7 @@ private fun DayTimeline(
 
 @Composable
 private fun FreeTimeCard(
-    freeTime: DayTimelineItem.FreeTime,
-    onAddTask: (LocalTime) -> Unit
+    freeTime: DayTimelineItem.FreeTime
 ) {
     val shape = RoundedCornerShape(16.dp)
     Surface(
@@ -819,7 +811,6 @@ private fun FreeTimeCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .clickable { onAddTask(freeTime.start) }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             val isWholeDay = freeTime.start == LocalTime(0, 0) && freeTime.endExclusive == null
@@ -1083,7 +1074,10 @@ private data class EditorSnapshot(
     val type: TaskType,
     val isImportant: Boolean,
     val start: LocalTime,
-    val end: LocalTime?
+    val end: LocalTime?,
+    val reminderMinutesBefore: Int?,
+    val repeat: TaskRepeat,
+    val flexibleIntervalDays: Int?
 )
 @Composable
 private fun IntervalTaskCard(
@@ -1436,25 +1430,43 @@ private fun MonthView(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 private fun TaskEditorScreen(
+    sessionKey: Int,
     initialTask: Task?,
     defaultDate: LocalDate,
     defaultStart: LocalTime?,
     initialType: TaskType,
     onValidateSchedule: suspend (String?, LocalDate, TaskType, LocalTime, LocalTime?) -> String?,
     onDismiss: () -> Unit,
-    onCreate: (String, String?, LocalDate, TaskType, LocalTime, LocalTime?, Boolean) -> Unit,
+    onCreate: (String, String?, LocalDate, TaskType, LocalTime, LocalTime?, Boolean, Int?, TaskRepeat, Int?) -> Unit,
     onUpdate: (Task) -> Unit
 ) {
     val context = LocalContext.current
 
-    var title by rememberSaveable { mutableStateOf(initialTask?.title.orEmpty()) }
-    var description by rememberSaveable { mutableStateOf(initialTask?.description.orEmpty()) }
-    var type by rememberSaveable { mutableStateOf(initialTask?.type ?: initialType) }
-    var isImportant by rememberSaveable { mutableStateOf(initialTask?.isImportant ?: false) }
-    var saveError by rememberSaveable { mutableStateOf<String?>(null) }
-    var showDiscardDialog by rememberSaveable { mutableStateOf(false) }
+    val editorKey = remember(sessionKey, initialTask?.id, defaultDate, defaultStart, initialType) {
+        buildString {
+            append(sessionKey)
+            append('-')
+            append(initialTask?.id ?: "new")
+            append('-')
+            append(defaultDate)
+            append('-')
+            append(defaultStart?.toString() ?: "none")
+            append('-')
+            append(initialType.name)
+        }
+    }
 
-    var selectedDate by rememberSaveable(stateSaver = LocalDateSaver) {
+    var title by rememberSaveable(editorKey) { mutableStateOf(initialTask?.title.orEmpty()) }
+    var description by rememberSaveable(editorKey) { mutableStateOf(initialTask?.description.orEmpty()) }
+    var type by rememberSaveable(editorKey) { mutableStateOf(initialTask?.type ?: initialType) }
+    var isImportant by rememberSaveable(editorKey) { mutableStateOf(initialTask?.isImportant ?: false) }
+    var reminderMinutesBefore by rememberSaveable(editorKey) { mutableStateOf(initialTask?.reminderMinutesBefore) }
+    var repeatRule by rememberSaveable(editorKey) { mutableStateOf(initialTask?.repeat ?: TaskRepeat.NONE) }
+    var flexibleIntervalDays by rememberSaveable(editorKey) { mutableStateOf(initialTask?.repeatFlexibleIntervalDays) }
+    var saveError by rememberSaveable(editorKey) { mutableStateOf<String?>(null) }
+    var showDiscardDialog by rememberSaveable(editorKey) { mutableStateOf(false) }
+
+    var selectedDate by rememberSaveable(editorKey, stateSaver = LocalDateSaver) {
         mutableStateOf(initialTask?.date ?: defaultDate)
     }
 
@@ -1469,7 +1481,7 @@ private fun TaskEditorScreen(
         initialTask?.end ?: defaultEndFor(initialStart)
     }
 
-    val initialSnapshot = remember(initialTask, defaultDate, initialStart, initialEndCandidate, initialType) {
+    val initialSnapshot = remember(sessionKey, initialTask, defaultDate, initialStart, initialEndCandidate, initialType) {
         EditorSnapshot(
             title = initialTask?.title.orEmpty(),
             description = initialTask?.description.orEmpty(),
@@ -1477,7 +1489,14 @@ private fun TaskEditorScreen(
             type = initialTask?.type ?: initialType,
             isImportant = initialTask?.isImportant ?: false,
             start = initialStart,
-            end = if ((initialTask?.type ?: initialType) == TaskType.INTERVAL) initialEndCandidate else null
+            end = if ((initialTask?.type ?: initialType) == TaskType.INTERVAL) initialEndCandidate else null,
+            reminderMinutesBefore = initialTask?.reminderMinutesBefore,
+            repeat = initialTask?.repeat ?: TaskRepeat.NONE,
+            flexibleIntervalDays = if ((initialTask?.repeat ?: TaskRepeat.NONE) == TaskRepeat.FLEXIBLE) {
+                initialTask?.repeatFlexibleIntervalDays
+            } else {
+                null
+            }
         )
     }
 
@@ -1490,14 +1509,18 @@ private fun TaskEditorScreen(
         }
     }
 
-    var startHour by rememberSaveable { mutableIntStateOf(initialStart.hour) }
-    var startMinute by rememberSaveable { mutableIntStateOf(initialStart.minute) }
-    var endHour by rememberSaveable { mutableIntStateOf(initialEndCandidate.hour) }
-    var endMinute by rememberSaveable { mutableIntStateOf(initialEndCandidate.minute) }
+    var startHour by rememberSaveable(editorKey) { mutableIntStateOf(initialStart.hour) }
+    var startMinute by rememberSaveable(editorKey) { mutableIntStateOf(initialStart.minute) }
+    var endHour by rememberSaveable(editorKey) { mutableIntStateOf(initialEndCandidate.hour) }
+    var endMinute by rememberSaveable(editorKey) { mutableIntStateOf(initialEndCandidate.minute) }
 
     val startTime = remember(startHour, startMinute) { LocalTime(startHour, startMinute) }
     val endTime = remember(endHour, endMinute, type) {
         if (type == TaskType.INTERVAL) LocalTime(endHour, endMinute) else null
+    }
+
+    val normalizedFlexibleInterval = remember(repeatRule, flexibleIntervalDays) {
+        if (repeatRule == TaskRepeat.FLEXIBLE) flexibleIntervalDays else null
     }
 
     val hasChanges by remember(
@@ -1508,6 +1531,9 @@ private fun TaskEditorScreen(
         isImportant,
         startTime,
         endTime,
+        reminderMinutesBefore,
+        repeatRule,
+        normalizedFlexibleInterval,
         initialSnapshot
     ) {
         derivedStateOf {
@@ -1517,7 +1543,10 @@ private fun TaskEditorScreen(
                 type != initialSnapshot.type ||
                 isImportant != initialSnapshot.isImportant ||
                 startTime != initialSnapshot.start ||
-                endTime != initialSnapshot.end
+                endTime != initialSnapshot.end ||
+                reminderMinutesBefore != initialSnapshot.reminderMinutesBefore ||
+                repeatRule != initialSnapshot.repeat ||
+                normalizedFlexibleInterval != initialSnapshot.flexibleIntervalDays
         }
     }
 
@@ -1541,6 +1570,23 @@ private fun TaskEditorScreen(
                 val adjusted = defaultEndFor(base)
                 endHour = adjusted.hour
                 endMinute = adjusted.minute
+            }
+        }
+    }
+
+    LaunchedEffect(startTime, reminderMinutesBefore) {
+        val startTotalMinutes = startTime.hour * 60 + startTime.minute
+        val maxLead = startTotalMinutes - 5
+        if (maxLead < 5) {
+            if (reminderMinutesBefore != null) {
+                reminderMinutesBefore = null
+            }
+        } else {
+            reminderMinutesBefore?.let { current ->
+                val clamped = current.coerceIn(5, maxLead)
+                if (clamped != current) {
+                    reminderMinutesBefore = clamped
+                }
             }
         }
     }
@@ -1583,8 +1629,30 @@ private fun TaskEditorScreen(
         }
         val trimmedDescription = description.takeIf { it.isNotBlank() }
         val end = if (type == TaskType.INTERVAL) LocalTime(endHour, endMinute) else null
+        val reminder = reminderMinutesBefore
+        val flexibleInterval = if (repeatRule == TaskRepeat.FLEXIBLE) {
+            val interval = (flexibleIntervalDays ?: 1)
+            if (interval < 1) {
+                saveError = context.getString(R.string.repeat_flexible_error)
+                return
+            }
+            interval
+        } else {
+            null
+        }
         if (initialTask == null) {
-            onCreate(title, trimmedDescription, selectedDate, type, startTime, end, isImportant)
+            onCreate(
+                title,
+                trimmedDescription,
+                selectedDate,
+                type,
+                startTime,
+                end,
+                isImportant,
+                reminder,
+                repeatRule,
+                flexibleInterval
+            )
         } else {
             onUpdate(
                 initialTask.copy(
@@ -1594,7 +1662,10 @@ private fun TaskEditorScreen(
                     type = type,
                     start = startTime,
                     end = end,
-                    isImportant = isImportant
+                    isImportant = isImportant,
+                    reminderMinutesBefore = reminder,
+                    repeat = repeatRule,
+                    repeatFlexibleIntervalDays = flexibleInterval
                 )
             )
         }
@@ -1749,6 +1820,23 @@ private fun TaskEditorScreen(
                         )
                     }
                 }
+                ReminderSelector(
+                    startTime = startTime,
+                    reminderMinutesBefore = reminderMinutesBefore,
+                    onReminderChanged = { value ->
+                        reminderMinutesBefore = value
+                        if (saveError != null && saveError != scheduleError) saveError = null
+                    }
+                )
+                RepeatSelector(
+                    repeat = repeatRule,
+                    flexibleIntervalDays = flexibleIntervalDays,
+                    onRepeatChanged = { rule, interval ->
+                        repeatRule = rule
+                        flexibleIntervalDays = interval
+                        if (saveError != null && saveError != scheduleError) saveError = null
+                    }
+                )
                 ImportantSelector(isImportant = isImportant, onChanged = { isImportant = it })
                 scheduleError?.let {
                     ErrorMessageCard(text = it)
@@ -1843,6 +1931,416 @@ private fun TypeSelector(selected: TaskType, onSelect: (TaskType) -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun ReminderSelector(
+    startTime: LocalTime,
+    reminderMinutesBefore: Int?,
+    onReminderChanged: (Int?) -> Unit
+) {
+    val shape = RoundedCornerShape(12.dp)
+    val border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    val startTotalMinutes = startTime.hour * 60 + startTime.minute
+    val maxLead = startTotalMinutes - 5
+    val canSetReminder = maxLead >= 5
+    var isDialogVisible by rememberSaveable { mutableStateOf(false) }
+
+    val summary = reminderMinutesBefore?.let { minutes ->
+        when {
+            minutes >= 60 && minutes % 60 == 0 -> stringResource(
+                id = R.string.reminder_summary_hours,
+                minutes / 60
+            )
+            minutes >= 60 -> stringResource(
+                id = R.string.reminder_summary_hours_minutes,
+                minutes / 60,
+                minutes % 60
+            )
+            minutes > 0 -> stringResource(id = R.string.reminder_summary_minutes, minutes)
+            else -> stringResource(id = R.string.reminder_none)
+        }
+    } ?: stringResource(id = R.string.reminder_none)
+
+    val label = stringResource(id = R.string.reminder_title)
+    val unavailable = stringResource(id = R.string.reminder_unavailable)
+
+    Surface(
+        onClick = { if (canSetReminder) isDialogVisible = true },
+        shape = shape,
+        border = border,
+        tonalElevation = 0.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .alpha(if (canSetReminder) 1f else 0.6f)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(imageVector = Icons.Filled.Notifications, contentDescription = null)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = if (canSetReminder) summary else unavailable,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+
+    if (isDialogVisible && canSetReminder) {
+        ReminderDialog(
+            startTime = startTime,
+            initialMinutes = reminderMinutesBefore,
+            onDismiss = { isDialogVisible = false },
+            onConfirm = { minutes ->
+                onReminderChanged(minutes)
+                isDialogVisible = false
+            },
+            onRemove = {
+                onReminderChanged(null)
+                isDialogVisible = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun ReminderDialog(
+    startTime: LocalTime,
+    initialMinutes: Int?,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit,
+    onRemove: () -> Unit
+) {
+    val maxLead = startTime.hour * 60 + startTime.minute - 5
+    val safeInitial = initialMinutes?.coerceIn(5, maxLead)
+        ?: max(5, min(15, maxLead))
+    var hours by rememberSaveable(maxLead, safeInitial) { mutableIntStateOf(safeInitial / 60) }
+    var minutes by rememberSaveable(maxLead, safeInitial) { mutableIntStateOf(safeInitial % 60) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val maxHours = maxLead / 60
+
+    fun maxMinutesForHour(hour: Int): Int = if (hour >= maxHours) maxLead % 60 else 59
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(id = R.string.reminder_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(id = R.string.reminder_dialog_message),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.reminder_hours_label),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        AndroidView(
+                            factory = { context ->
+                                NumberPicker(context).apply {
+                                    descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+                                    minValue = 0
+                                    maxValue = maxHours
+                                    value = hours
+                                    setOnValueChangedListener { _, _, newVal ->
+                                        hours = newVal
+                                    }
+                                }
+                            },
+                            update = { picker ->
+                                picker.maxValue = maxHours
+                                if (picker.value != hours) picker.value = hours
+                            }
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.reminder_minutes_label),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        AndroidView(
+                            factory = { context ->
+                                NumberPicker(context).apply {
+                                    descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+                                    minValue = 0
+                                    maxValue = maxMinutesForHour(hours)
+                                    value = minutes.coerceAtMost(maxMinutesForHour(hours))
+                                    setOnValueChangedListener { _, _, newVal ->
+                                        minutes = newVal
+                                    }
+                                }
+                            },
+                            update = { picker ->
+                                val maxMinutes = maxMinutesForHour(hours)
+                                picker.maxValue = maxMinutes
+                                val safe = minutes.coerceIn(0, maxMinutes)
+                                if (picker.value != safe) picker.value = safe
+                            }
+                        )
+                    }
+                }
+                error?.let { message ->
+                    Text(
+                        text = message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val total = hours * 60 + minutes
+                if (total < 5) {
+                    error = stringResource(id = R.string.reminder_error_min)
+                    return@TextButton
+                }
+                if (total > maxLead) {
+                    error = stringResource(id = R.string.reminder_error_range, maxLead)
+                    return@TextButton
+                }
+                onConfirm(total)
+                onDismiss()
+            }) {
+                Text(text = stringResource(id = android.R.string.ok))
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) {
+                    Text(text = stringResource(id = android.R.string.cancel))
+                }
+                if (initialMinutes != null) {
+                    TextButton(onClick = {
+                        onRemove()
+                        onDismiss()
+                    }) {
+                        Text(text = stringResource(id = R.string.reminder_remove))
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun RepeatSelector(
+    repeat: TaskRepeat,
+    flexibleIntervalDays: Int?,
+    onRepeatChanged: (TaskRepeat, Int?) -> Unit
+) {
+    val shape = RoundedCornerShape(12.dp)
+    var isDialogVisible by rememberSaveable { mutableStateOf(false) }
+    val summary = when (repeat) {
+        TaskRepeat.NONE -> stringResource(id = R.string.repeat_none)
+        TaskRepeat.EVERY_DAY -> stringResource(id = R.string.repeat_every_day)
+        TaskRepeat.WEEKDAYS -> stringResource(id = R.string.repeat_weekdays)
+        TaskRepeat.EVERY_WEEK -> stringResource(id = R.string.repeat_every_week)
+        TaskRepeat.EVERY_TWO_WEEKS -> stringResource(id = R.string.repeat_every_two_weeks)
+        TaskRepeat.EVERY_THREE_WEEKS -> stringResource(id = R.string.repeat_every_three_weeks)
+        TaskRepeat.EVERY_MONTH -> stringResource(id = R.string.repeat_every_month)
+        TaskRepeat.EVERY_YEAR -> stringResource(id = R.string.repeat_every_year)
+        TaskRepeat.FLEXIBLE -> stringResource(
+            id = R.string.repeat_flexible_summary,
+            (flexibleIntervalDays ?: 1).coerceAtLeast(1)
+        )
+    }
+
+    Surface(
+        onClick = { isDialogVisible = true },
+        shape = shape,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        tonalElevation = 0.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(imageVector = Icons.Filled.Repeat, contentDescription = null)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(id = R.string.repeat_title),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+
+    if (isDialogVisible) {
+        RepeatDialog(
+            current = repeat,
+            currentInterval = flexibleIntervalDays,
+            onDismiss = { isDialogVisible = false },
+            onConfirm = { rule, interval ->
+                onRepeatChanged(rule, interval)
+                isDialogVisible = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun RepeatDialog(
+    current: TaskRepeat,
+    currentInterval: Int?,
+    onDismiss: () -> Unit,
+    onConfirm: (TaskRepeat, Int?) -> Unit
+) {
+    val options = listOf(
+        TaskRepeat.NONE to R.string.repeat_none,
+        TaskRepeat.EVERY_DAY to R.string.repeat_every_day,
+        TaskRepeat.WEEKDAYS to R.string.repeat_weekdays,
+        TaskRepeat.EVERY_WEEK to R.string.repeat_every_week,
+        TaskRepeat.EVERY_TWO_WEEKS to R.string.repeat_every_two_weeks,
+        TaskRepeat.EVERY_THREE_WEEKS to R.string.repeat_every_three_weeks,
+        TaskRepeat.EVERY_MONTH to R.string.repeat_every_month,
+        TaskRepeat.EVERY_YEAR to R.string.repeat_every_year,
+        TaskRepeat.FLEXIBLE to R.string.repeat_flexible
+    )
+
+    var selectedRule by rememberSaveable { mutableStateOf(current) }
+    var intervalState by rememberSaveable { mutableIntStateOf((currentInterval ?: 1).coerceIn(1, 365)) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(selectedRule) {
+        if (selectedRule != TaskRepeat.FLEXIBLE && error != null) {
+            error = null
+        }
+    }
+
+    LaunchedEffect(intervalState) {
+        if (selectedRule == TaskRepeat.FLEXIBLE && error != null) {
+            error = null
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(id = R.string.repeat_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                options.forEach { (rule, labelRes) ->
+                    val isSelected = selectedRule == rule
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                }
+                            )
+                            .clickable { selectedRule = rule }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = isSelected, onClick = null)
+                        Text(
+                            text = stringResource(id = labelRes),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+                if (selectedRule == TaskRepeat.FLEXIBLE) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = stringResource(id = R.string.repeat_flexible_label),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        AndroidView(
+                            factory = { context ->
+                                NumberPicker(context).apply {
+                                    descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+                                    minValue = 1
+                                    maxValue = 365
+                                    value = intervalState
+                                    setOnValueChangedListener { _, _, newVal ->
+                                        intervalState = newVal
+                                    }
+                                }
+                            },
+                            update = { picker ->
+                                picker.maxValue = 365
+                                if (picker.value != intervalState) picker.value = intervalState
+                            }
+                        )
+                        error?.let { message ->
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (selectedRule == TaskRepeat.FLEXIBLE) {
+                    if (intervalState !in 1..365) {
+                        error = stringResource(id = R.string.repeat_flexible_error)
+                        return@TextButton
+                    }
+                    onConfirm(selectedRule, intervalState)
+                } else {
+                    onConfirm(selectedRule, null)
+                }
+                onDismiss()
+            }) {
+                Text(text = stringResource(id = android.R.string.ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(id = android.R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable
