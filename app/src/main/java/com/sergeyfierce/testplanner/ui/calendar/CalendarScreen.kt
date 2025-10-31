@@ -31,7 +31,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -190,7 +189,6 @@ fun CalendarScreen(
         uiState.dayTasks.filter { selectedTaskIds.contains(it.id) }
     }
     val cannotEditMessage = stringResource(id = R.string.edit_completed_not_allowed)
-    val showCelebration = isToday && uiState.dayTasks.isNotEmpty() && uiState.dayTasks.all { it.isDone }
 
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = uiState.currentDate.toEpochMillis())
     var isDatePickerVisible by rememberSaveable { mutableStateOf(false) }
@@ -459,11 +457,6 @@ fun CalendarScreen(
             )
         }
 
-        CelebrationOverlay(
-            visible = showCelebration && !isEditorVisible,
-            modifier = Modifier.fillMaxSize()
-        )
-
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
@@ -583,139 +576,6 @@ private fun CalendarTopBar(
         },
         windowInsets = WindowInsets(0, 0, 0, 0)
     )
-}
-
-private data class ConfettiParticle(
-    val baseX: Float,
-    val speedMultiplier: Float,
-    val phaseOffset: Float,
-    val sizeMultiplier: Float,
-    val color: Color
-)
-
-@OptIn(ExperimentalAnimationApi::class)
-@Composable
-private fun CelebrationOverlay(
-    visible: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val palette = listOf(
-        MaterialTheme.colorScheme.primary,
-        MaterialTheme.colorScheme.secondary,
-        MaterialTheme.colorScheme.tertiary,
-        MaterialTheme.colorScheme.inversePrimary
-    )
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(animationSpec = tween(durationMillis = 300)) +
-            scaleIn(
-                initialScale = 0.96f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessLow
-                )
-            ),
-        exit = fadeOut(animationSpec = tween(durationMillis = 500)),
-        modifier = modifier
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            ConfettiLayer(colors = palette, modifier = Modifier.fillMaxSize())
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(28.dp),
-                    tonalElevation = 12.dp,
-                    shadowElevation = 18.dp,
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.CalendarToday,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = stringResource(id = R.string.celebration_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = stringResource(id = R.string.celebration_message),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ConfettiLayer(
-    colors: List<Color>,
-    modifier: Modifier = Modifier,
-    particleCount: Int = 56
-) {
-    val particles = remember(colors, particleCount) {
-        List(particleCount) { index ->
-            ConfettiParticle(
-                baseX = Random.nextFloat(),
-                speedMultiplier = Random.nextFloat().coerceAtLeast(0.35f),
-                phaseOffset = Random.nextFloat(),
-                sizeMultiplier = Random.nextFloat().coerceIn(0.6f, 1.2f),
-                color = colors[index % colors.size]
-            )
-        }
-    }
-    val transition = rememberInfiniteTransition(label = "confetti-transition")
-    val fallProgress by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "confetti-fall"
-    )
-    val swayProgress by transition.animateFloat(
-        initialValue = -1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2200, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "confetti-sway"
-    )
-
-    Canvas(modifier = modifier.fillMaxSize()) {
-        val width = size.width
-        val height = size.height
-        val baseRadius = 6.dp.toPx()
-        particles.forEach { particle ->
-            val vertical = normalizeFraction(fallProgress * particle.speedMultiplier + particle.phaseOffset)
-            val horizontal = normalizeFraction(particle.baseX + swayProgress * 0.05f + vertical * 0.1f)
-            drawCircle(
-                color = particle.color.copy(alpha = 0.85f),
-                radius = baseRadius * particle.sizeMultiplier,
-                center = Offset(horizontal * width, vertical * height)
-            )
-        }
-    }
-}
-
-private fun normalizeFraction(value: Float): Float {
-    val remainder = value % 1f
-    return if (remainder < 0f) remainder + 1f else remainder
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
