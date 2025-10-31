@@ -88,7 +88,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -237,79 +236,60 @@ fun CalendarScreen(
         val allSelected = allTaskIds.isNotEmpty() && selectedTaskIds.containsAll(allTaskIds)
         val hasSelectableTasks = allTaskIds.isNotEmpty()
 
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = Color.Transparent,
-            snackbarHost = {},
-            topBar = {
-                AnimatedContent(
-                    targetState = isSelectionMode,
-                    transitionSpec = {
-                        (slideInVertically(animationSpec = tween(durationMillis = 250)) { fullHeight ->
-                            if (targetState) -fullHeight else fullHeight
-                        } + fadeIn()) togetherWith
-                            (slideOutVertically(animationSpec = tween(durationMillis = 250)) { fullHeight ->
-                                if (targetState) fullHeight else -fullHeight
-                            } + fadeOut())
-                    },
-                    label = "selection-top-bar"
-                ) { selectionActive ->
-                    if (selectionActive) {
-                        SelectionTopBar(
-                            selectedCount = selectedTasks.size,
-                            canEdit = canEditSelection,
-                            allSelected = allSelected,
-                            hasSelectableTasks = hasSelectableTasks,
-                            onToggleSelectAll = {
-                                if (allSelected) {
-                                    selectedTaskIds = emptySet()
-                                } else {
-                                    selectedTaskIds = allTaskIds.toSet()
-                                    isSelectionModeActive = true
-                                }
-                            },
-                            onCancel = {
+        Column(modifier = Modifier.fillMaxSize()) {
+            AnimatedContent(
+                targetState = isSelectionMode,
+                transitionSpec = {
+                    (slideInVertically(animationSpec = tween(durationMillis = 250)) { fullHeight ->
+                        if (targetState) -fullHeight else fullHeight
+                    } + fadeIn()) togetherWith
+                        (slideOutVertically(animationSpec = tween(durationMillis = 250)) { fullHeight ->
+                            if (targetState) fullHeight else -fullHeight
+                        } + fadeOut())
+                },
+                label = "selection-top-bar"
+            ) { selectionActive ->
+                if (selectionActive) {
+                    SelectionTopBar(
+                        selectedCount = selectedTasks.size,
+                        canEdit = canEditSelection,
+                        allSelected = allSelected,
+                        hasSelectableTasks = hasSelectableTasks,
+                        onToggleSelectAll = {
+                            if (allSelected) {
+                                selectedTaskIds = emptySet()
+                            } else {
+                                selectedTaskIds = allTaskIds.toSet()
+                                isSelectionModeActive = true
+                            }
+                        },
+                        onCancel = {
+                            selectedTaskIds = emptySet()
+                            isSelectionModeActive = false
+                        },
+                        onEdit = {
+                            selectedTasks.firstOrNull()?.let { task ->
                                 selectedTaskIds = emptySet()
                                 isSelectionModeActive = false
-                            },
-                            onEdit = {
-                                selectedTasks.firstOrNull()?.let { task ->
-                                    selectedTaskIds = emptySet()
-                                    isSelectionModeActive = false
-                                    openEditor(task)
-                                }
-                            },
-                            onDelete = { showDeleteConfirmation = true }
-                        )
-                    } else {
-                        CalendarTopBar(
-                            currentDate = uiState.currentDate,
-                            onPrevious = viewModel::goToPrevious,
-                            onNext = viewModel::goToNext,
-                            onDateClick = { isDatePickerVisible = true }
-                        )
-                    }
-                }
-            },
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            floatingActionButton = {
-                FloatingActionButton(onClick = {
-                    selectedTaskIds = emptySet()
-                    isSelectionModeActive = false
-                    editingTask = null
-                    editorDefaultStart = null
-                    editorInitialType = TaskType.POINT
-                    isEditorVisible = true
-                }) {
-                    Icon(imageVector = Icons.Filled.Add, contentDescription = null)
+                                openEditor(task)
+                            }
+                        },
+                        onDelete = { showDeleteConfirmation = true }
+                    )
+                } else {
+                    CalendarTopBar(
+                        currentDate = uiState.currentDate,
+                        onPrevious = viewModel::goToPrevious,
+                        onNext = viewModel::goToNext,
+                        onDateClick = { isDatePickerVisible = true }
+                    )
                 }
             }
-        ) { innerPadding ->
+
             Column(
                 modifier = Modifier
-                    .padding(innerPadding)
-                    .padding(horizontal = 16.dp)
                     .fillMaxSize()
+                    .padding(horizontal = 16.dp)
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
                 AnimatedVisibility(visible = showTodayButton) {
@@ -401,6 +381,22 @@ fun CalendarScreen(
                     }
                 )
             }
+        }
+
+        FloatingActionButton(
+            onClick = {
+                selectedTaskIds = emptySet()
+                isSelectionModeActive = false
+                editingTask = null
+                editorDefaultStart = null
+                editorInitialType = TaskType.POINT
+                isEditorVisible = true
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 24.dp, bottom = 128.dp)
+        ) {
+            Icon(imageVector = Icons.Filled.Add, contentDescription = null)
         }
 
         AnimatedVisibility(
@@ -1608,39 +1604,36 @@ private fun TaskEditorScreen(
         color = MaterialTheme.colorScheme.background,
         tonalElevation = 8.dp
     ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = if (initialTask == null) {
-                                stringResource(id = R.string.new_task)
-                            } else {
-                                stringResource(id = R.string.edit_task)
-                            }
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { attemptClose() }) {
-                            Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = null)
+        Column(modifier = Modifier.fillMaxSize()) {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = if (initialTask == null) {
+                            stringResource(id = R.string.new_task)
+                        } else {
+                            stringResource(id = R.string.edit_task)
                         }
-                    },
-                    actions = {
-                        TextButton(
-                            onClick = { handleSave() },
-                            enabled = scheduleError == null && title.isNotBlank()
-                        ) {
-                            Text(text = stringResource(id = R.string.save))
-                        }
-                    },
-                    windowInsets = WindowInsets(0, 0, 0, 0)
-                )
-            },
-            contentWindowInsets = WindowInsets(0, 0, 0, 0)
-        ) { innerPadding ->
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { attemptClose() }) {
+                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = null)
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick = { handleSave() },
+                        enabled = scheduleError == null && title.isNotBlank()
+                    ) {
+                        Text(text = stringResource(id = R.string.save))
+                    }
+                },
+                windowInsets = WindowInsets(0, 0, 0, 0)
+            )
+
             Column(
                 modifier = Modifier
-                    .padding(innerPadding)
+                    .fillMaxSize()
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 24.dp)
                     .verticalScroll(rememberScrollState()),
