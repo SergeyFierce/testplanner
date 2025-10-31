@@ -62,6 +62,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Close
@@ -82,6 +83,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -98,7 +100,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -107,7 +108,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.SideEffect
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.Saver
@@ -160,7 +160,6 @@ import kotlin.random.Random
 @Composable
 fun CalendarScreen(
     viewModel: CalendarViewModel,
-    onAddTaskActionChange: ((() -> Unit)?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -190,23 +189,6 @@ fun CalendarScreen(
         uiState.dayTasks.filter { selectedTaskIds.contains(it.id) }
     }
     val cannotEditMessage = stringResource(id = R.string.edit_completed_not_allowed)
-
-    val openNewTaskEditor: () -> Unit = {
-        selectedTaskIds = emptySet()
-        isSelectionModeActive = false
-        editingTask = null
-        editorDefaultStart = null
-        editorInitialType = TaskType.POINT
-        isEditorVisible = true
-    }
-
-    SideEffect {
-        onAddTaskActionChange(openNewTaskEditor)
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { onAddTaskActionChange(null) }
-    }
 
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = uiState.currentDate.toEpochMillis())
     var isDatePickerVisible by rememberSaveable { mutableStateOf(false) }
@@ -309,7 +291,19 @@ fun CalendarScreen(
                     }
                 }
             },
-            contentWindowInsets = WindowInsets(0, 0, 0, 0)
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            floatingActionButton = {
+                FloatingActionButton(onClick = {
+                    selectedTaskIds = emptySet()
+                    isSelectionModeActive = false
+                    editingTask = null
+                    editorDefaultStart = null
+                    editorInitialType = TaskType.POINT
+                    isEditorVisible = true
+                }) {
+                    Icon(imageVector = Icons.Filled.Add, contentDescription = null)
+                }
+            }
         ) { innerPadding ->
             Column(
                 modifier = Modifier
