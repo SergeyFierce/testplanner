@@ -102,6 +102,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.Saver
