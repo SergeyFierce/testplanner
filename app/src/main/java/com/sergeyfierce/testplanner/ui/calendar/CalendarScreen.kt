@@ -8,6 +8,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -15,19 +16,23 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +45,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
@@ -48,12 +54,11 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -65,11 +70,14 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -94,18 +102,16 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -115,8 +121,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -150,6 +161,8 @@ import kotlinx.datetime.toLocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
@@ -374,11 +387,19 @@ fun CalendarScreen(
                     dayContent = {
                         DayTimeline(
                             tasks = uiState.dayTasks,
-                            isToday = isToday,
+                            currentDate = uiState.currentDate,
                             onToggle = if (isSelectionMode) null else viewModel::onToggleTask,
                             selectedTaskIds = selectedTaskIds,
                             onTaskClick = { task -> handleTaskClick(task) },
-                            onTaskLongPress = { task -> handleTaskLongPress(task) }
+                            onTaskLongPress = { task -> handleTaskLongPress(task) },
+                            onRequestCreateAt = { start ->
+                                selectedTaskIds = emptySet()
+                                isSelectionModeActive = false
+                                editingTask = null
+                                editorDefaultStart = start
+                                editorInitialType = TaskType.POINT
+                                isEditorVisible = true
+                            }
                         )
                     },
                     weekContent = {
@@ -682,138 +703,705 @@ private fun AnimatedCalendarContent(
         }
     }
 }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DayTimeline(
     tasks: List<Task>,
-    isToday: Boolean,
+    currentDate: LocalDate,
     onToggle: ((Task, Boolean) -> Unit)?,
     selectedTaskIds: Set<String>,
     onTaskClick: (Task) -> Unit,
-    onTaskLongPress: (Task) -> Unit
+    onTaskLongPress: (Task) -> Unit,
+    onRequestCreateAt: (LocalTime) -> Unit
 ) {
-    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    val coroutineScope = rememberCoroutineScope()
+    var dpPerMinute by rememberSaveable { mutableFloatStateOf(DefaultTimelineZoom.dpPerMinute) }
+    val scrollState = rememberScrollState()
+    var viewportHeightPx by remember { mutableIntStateOf(0) }
+    var quickAddMinute by rememberSaveable { mutableIntStateOf(-1) }
+    var hasAutoPositioned by rememberSaveable(currentDate.toString()) { mutableStateOf(false) }
+
     val sortedTasks = remember(tasks) {
         tasks.sortedWith(compareBy<Task> { it.start }.thenBy { it.title })
     }
-    val timelineItems = remember(sortedTasks) {
-        buildTimeline(sortedTasks)
+    val taskBlocks = remember(sortedTasks) {
+        buildTimeline(sortedTasks).filterIsInstance<DayTimelineItem.TaskBlock>()
     }
 
-    LaunchedEffect(isToday) {
-        if (isToday) {
-            val currentHour = Clock.System.now()
-                .toLocalDateTime(TimeZone.currentSystemDefault()).time.hour
-            val index = timelineItems.indexOfFirst { item ->
-                item is DayTimelineItem.TaskBlock && item.task.start.hour >= currentHour
-            }.takeIf { it >= 0 } ?: 0
-            listState.scrollToItem(index)
+    val pxPerMinute = dpPerMinute * density.density
+    val totalHeightPx = pxPerMinute * MINUTES_IN_DAY
+    val totalHeightDp = (MINUTES_IN_DAY * dpPerMinute).dp
+
+    val currentMinute by rememberCurrentMinute(currentDate)
+
+    LaunchedEffect(currentDate) {
+        hasAutoPositioned = false
+    }
+
+    LaunchedEffect(currentDate, dpPerMinute, viewportHeightPx, hasAutoPositioned) {
+        if (!hasAutoPositioned && viewportHeightPx > 0) {
+            val initialMinute = currentMinuteForDate(currentDate) ?: 0
+            val targetPx = initialMinute * pxPerMinute - viewportHeightPx / 2f
+            val clamped = targetPx.coerceIn(0f, (totalHeightPx - viewportHeightPx).coerceAtLeast(0f))
+            scrollState.scrollTo(clamped.roundToInt())
+            hasAutoPositioned = true
         }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 0.dp)
-    ) {
-        items(
-            items = timelineItems,
-            key = { item ->
-                when (item) {
-                    is DayTimelineItem.FreeTime -> "free-${item.start}-${item.endExclusive}"
-                    is DayTimelineItem.TaskBlock -> item.task.id
-                }
+    if (quickAddMinute !in 0 until MINUTES_IN_DAY) {
+        quickAddMinute = -1
+    }
+
+    val transformModifier = Modifier.pointerInput(dpPerMinute, viewportHeightPx) {
+        detectTransformGestures { centroid, _, zoom, _ ->
+            if (zoom == 1f) return@detectTransformGestures
+            val oldZoom = dpPerMinute
+            val newZoom = (oldZoom * zoom).coerceIn(MIN_TIMELINE_ZOOM, MAX_TIMELINE_ZOOM)
+            if (newZoom == oldZoom) return@detectTransformGestures
+
+            val oldPxPerMinute = oldZoom * density.density
+            val focusMinute = ((scrollState.value + centroid.y) / oldPxPerMinute)
+                .coerceIn(0f, MINUTES_IN_DAY.toFloat())
+
+            dpPerMinute = newZoom
+
+            val newPxPerMinute = newZoom * density.density
+            val newTotalHeight = newPxPerMinute * MINUTES_IN_DAY
+            val maxScroll = (newTotalHeight - viewportHeightPx).coerceAtLeast(0f)
+            val target = (focusMinute * newPxPerMinute - centroid.y).coerceIn(0f, maxScroll)
+            coroutineScope.launch {
+                scrollState.scrollTo(target.roundToInt())
             }
-        ) { item ->
-            val placementModifier = Modifier
-                .fillMaxWidth()
-                .animateItemPlacement(animationSpec = tween(durationMillis = 300))
-            when (item) {
-                is DayTimelineItem.FreeTime -> Box(modifier = placementModifier) {
-                    FreeTimeCard(
-                        freeTime = item
-                    )
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { viewportHeightPx = it.size.height }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 16.dp)
+        ) {
+            TimelineAxisLabels(
+                dpPerMinute = dpPerMinute,
+                totalHeight = totalHeightDp,
+                scrollState = scrollState,
+                modifier = Modifier
+                    .width(72.dp)
+                    .fillMaxHeight()
+            )
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clipToBounds()
+                    .then(transformModifier)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .pointerInput(dpPerMinute) {
+                            detectTapGestures(
+                                onTap = { offset ->
+                                    val rawMinute = ((scrollState.value + offset.y) / pxPerMinute)
+                                        .roundToInt()
+                                    quickAddMinute = smartSnapMinute(rawMinute, dpPerMinute)
+                                },
+                                onLongPress = { offset ->
+                                    val rawMinute = ((scrollState.value + offset.y) / pxPerMinute)
+                                        .roundToInt()
+                                    quickAddMinute = smartSnapMinute(rawMinute, dpPerMinute)
+                                }
+                            )
+                        }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(totalHeightDp)
+                    ) {
+                        TimelineBackground(
+                            dpPerMinute = dpPerMinute,
+                            currentMinute = currentMinute,
+                            modifier = Modifier.matchParentSize()
+                        )
+
+                        taskBlocks.forEach { block ->
+                            val task = block.task
+                            val startMinute = task.start.toMinutesOfDay()
+                            val endMinute = (task.end ?: task.start).toMinutesOfDay()
+                            val durationMinutes = (endMinute - startMinute).coerceAtLeast(1)
+                            val height = (durationMinutes * dpPerMinute).dp.coerceAtLeast(24.dp)
+                            val yOffset = (startMinute * dpPerMinute).dp
+
+                            TimelineTaskBlock(
+                                task = task,
+                                nestedPoints = block.nestedPoints,
+                                height = height,
+                                isSelected = selectedTaskIds.contains(task.id),
+                                showCheckbox = onToggle != null,
+                                onToggle = onToggle,
+                                onClick = { onTaskClick(task) },
+                                onLongPress = { onTaskLongPress(task) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp)
+                                    .offset(y = yOffset)
+                            )
+                        }
+                    }
                 }
-                is DayTimelineItem.TaskBlock -> {
-                    Box(modifier = placementModifier) {
-                        if (item.task.isInterval) {
-                            IntervalTaskCard(
-                                task = item.task,
-                                nestedPoints = item.nestedPoints,
-                                onToggle = onToggle,
-                                showCheckbox = onToggle != null,
-                                isSelected = selectedTaskIds.contains(item.task.id),
-                                selectedTaskIds = selectedTaskIds,
-                                onClick = { onTaskClick(item.task) },
-                                onLongPress = { onTaskLongPress(item.task) },
-                                onNestedClick = onTaskClick,
-                                onNestedLongPress = onTaskLongPress
+
+                currentMinute?.let { minute ->
+                    val yPx = minute * pxPerMinute - scrollState.value
+                    if (viewportHeightPx == 0 || (yPx in -72f..viewportHeightPx + 72f)) {
+                        val yOffset = with(density) { yPx.toDp() }
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            tonalElevation = 3.dp,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = (-12).dp, y = yOffset - 12.dp)
+                        ) {
+                            Text(
+                                text = stringResource(id = R.string.timeline_now),
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
-                        } else {
-                            PointTaskCard(
-                                task = item.task,
-                                onToggle = onToggle,
-                                showCheckbox = onToggle != null,
-                                isSelected = selectedTaskIds.contains(item.task.id),
-                                onClick = { onTaskClick(item.task) },
-                                onLongPress = { onTaskLongPress(item.task) }
-                            )
+                        }
+                    }
+                }
+
+                if (quickAddMinute >= 0) {
+                    val quickAddPx = quickAddMinute * pxPerMinute - scrollState.value
+                    if (viewportHeightPx == 0 || (quickAddPx in -72f..viewportHeightPx + 72f)) {
+                        val yOffset = with(density) { quickAddPx.toDp() }
+                        val quickAddTime = minutesToLocalTime(quickAddMinute)
+                        Surface(
+                            onClick = {
+                                quickAddMinute = -1
+                                onRequestCreateAt(quickAddTime)
+                            },
+                            color = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            shape = RoundedCornerShape(20.dp),
+                            tonalElevation = 6.dp,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = (-12).dp, y = yOffset - 20.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = stringResource(id = R.string.timeline_quick_add)
+                                )
+                                Text(
+                                    text = quickAddTime.toTimeLabel(),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+
+        ZoomPanel(
+            dpPerMinute = dpPerMinute,
+            onZoomLevelSelected = { newZoom ->
+                val oldPxPerMinute = dpPerMinute * density.density
+                val focusMinute = if (viewportHeightPx > 0) {
+                    ((scrollState.value + viewportHeightPx / 2f) / oldPxPerMinute)
+                        .coerceIn(0f, MINUTES_IN_DAY.toFloat())
+                } else {
+                    MINUTES_IN_DAY / 2f
+                }
+                dpPerMinute = newZoom
+                val newPxPerMinute = newZoom * density.density
+                val newTotalHeight = newPxPerMinute * MINUTES_IN_DAY
+                val maxScroll = (newTotalHeight - viewportHeightPx).coerceAtLeast(0f)
+                val target = (focusMinute * newPxPerMinute - viewportHeightPx / 2f).coerceIn(0f, maxScroll)
+                coroutineScope.launch {
+                    scrollState.animateScrollTo(target.roundToInt())
+                }
+            },
+            onZoomIn = {
+                findAdjacentZoom(dpPerMinute, direction = 1)?.let { level ->
+                    onZoomLevelSelected(level.dpPerMinute)
+                }
+            },
+            onZoomOut = {
+                findAdjacentZoom(dpPerMinute, direction = -1)?.let { level ->
+                    onZoomLevelSelected(level.dpPerMinute)
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+        )
+
+        DayMiniMap(
+            tasks = sortedTasks,
+            scrollState = scrollState,
+            dpPerMinute = dpPerMinute,
+            viewportHeightPx = viewportHeightPx,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+            onNavigate = { fraction ->
+                val target = (fraction * totalHeightPx - viewportHeightPx / 2f)
+                    .coerceIn(0f, (totalHeightPx - viewportHeightPx).coerceAtLeast(0f))
+                coroutineScope.launch {
+                    scrollState.animateScrollTo(target.roundToInt())
+                }
+            }
+        )
     }
 }
 
 @Composable
-private fun FreeTimeCard(
-    freeTime: DayTimelineItem.FreeTime
+private fun TimelineBackground(
+    dpPerMinute: Float,
+    currentMinute: Int?,
+    modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(16.dp)
-    Surface(
-        shape = shape,
-        tonalElevation = 2.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            val isWholeDay = freeTime.start == LocalTime(0, 0) && freeTime.endExclusive == null
-            Text(
-                text = if (isWholeDay) {
-                    stringResource(id = R.string.free_day_title)
-                } else {
-                    stringResource(id = R.string.free_time_title)
-                },
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            if (isWholeDay) {
-                Text(
-                    text = stringResource(id = R.string.free_day_message),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+    val density = LocalDensity.current
+    val pxPerMinute = dpPerMinute * density.density
+    val majorStep = when {
+        dpPerMinute >= 4f -> 5
+        dpPerMinute >= 2.5f -> 10
+        dpPerMinute >= 1.5f -> 15
+        dpPerMinute >= 1f -> 30
+        dpPerMinute >= 0.6f -> 60
+        else -> 120
+    }
+    val minorStep = when {
+        dpPerMinute >= 4f -> 1
+        dpPerMinute >= 2.5f -> 5
+        dpPerMinute >= 1.5f -> 5
+        dpPerMinute >= 1f -> 15
+        dpPerMinute >= 0.6f -> 30
+        else -> 60
+    }
+
+    Canvas(modifier = modifier) {
+        val width = size.width
+        for (minute in 0..MINUTES_IN_DAY step minorStep) {
+            val y = minute * pxPerMinute
+            if (y > size.height) break
+            val isMajor = minute % majorStep == 0
+            val color = if (isMajor) {
+                MaterialTheme.colorScheme.outlineVariant
             } else {
-                val endLabel = freeTime.endExclusive?.toTimeLabel()
-                    ?: stringResource(id = R.string.free_time_until_end)
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+            }
+            val strokeWidth = if (isMajor) 1.6f else 1f
+            drawLine(
+                color = color,
+                start = Offset(0f, y),
+                end = Offset(width, y),
+                strokeWidth = strokeWidth
+            )
+        }
+
+        currentMinute?.let { minute ->
+            val y = minute * pxPerMinute
+            drawLine(
+                color = MaterialTheme.colorScheme.tertiary,
+                start = Offset(0f, y),
+                end = Offset(size.width, y),
+                strokeWidth = 3f
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimelineAxisLabels(
+    dpPerMinute: Float,
+    totalHeight: Dp,
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier
+) {
+    val labelStep = when {
+        dpPerMinute >= 3.5f -> 15
+        dpPerMinute >= 2f -> 30
+        dpPerMinute >= 1f -> 60
+        dpPerMinute >= 0.6f -> 120
+        else -> 180
+    }
+
+    Box(
+        modifier = modifier
+            .clipToBounds()
+    ) {
+        Box(
+            modifier = Modifier.offset { IntOffset(x = 0, y = -scrollState.value) }
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(totalHeight)
+            ) {
+                for (minute in 0..MINUTES_IN_DAY step labelStep) {
+                    val yOffset = (minute * dpPerMinute).dp
+                    Text(
+                        text = minutesToLocalTime(minute).toTimeLabel(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .offset(x = 8.dp, y = yOffset - 10.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TimelineTaskBlock(
+    task: Task,
+    nestedPoints: List<Task>,
+    height: Dp,
+    isSelected: Boolean,
+    showCheckbox: Boolean,
+    onToggle: ((Task, Boolean) -> Unit)?,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val containerColor = taskContainerColor(task)
+    val contentColor = taskContentColor(task)
+    val border = when {
+        isSelected -> BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        task.isImportant -> BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+        else -> null
+    }
+    val elevation = if (task.isDone) 0.dp else 4.dp
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (task.isDone) 0.6f else 1f,
+        animationSpec = tween(durationMillis = 220),
+        label = "timelineTaskAlpha"
+    )
+    Surface(
+        color = containerColor,
+        contentColor = contentColor,
+        tonalElevation = elevation,
+        border = border,
+        shape = RoundedCornerShape(16.dp),
+        modifier = modifier
+            .height(height)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress
+            )
+    ) {
+        val isCompact = height < 72.dp
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .alpha(contentAlpha),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = timeRangeLabel(task),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = task.title,
+                        style = if (isCompact) {
+                            MaterialTheme.typography.titleSmall
+                        } else {
+                            MaterialTheme.typography.titleMedium
+                        },
+                        fontWeight = FontWeight.Bold,
+                        maxLines = if (isCompact) 1 else 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (showCheckbox && onToggle != null) {
+                    Checkbox(
+                        checked = task.isDone,
+                        onCheckedChange = { checked -> onToggle(task, checked) }
+                    )
+                }
+            }
+
+            if (!task.description.isNullOrBlank() && !isCompact) {
                 Text(
-                    text = stringResource(
-                        id = R.string.free_time_range,
-                        freeTime.start.toTimeLabel(),
-                        endLabel
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = task.description!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (nestedPoints.isNotEmpty() && !isCompact) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    nestedPoints.forEach { nested ->
+                        Text(
+                            text = "• ${nested.title}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        ImportantDot(
+            visible = task.isImportant,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 8.dp, end = 8.dp)
+        )
+    }
+}
+
+private data class TimelineZoomLevel(val labelRes: Int, val dpPerMinute: Float)
+
+private val TimelineZoomLevels = listOf(
+    TimelineZoomLevel(R.string.timeline_zoom_level_24h, 0.4f),
+    TimelineZoomLevel(R.string.timeline_zoom_level_12h, 0.6f),
+    TimelineZoomLevel(R.string.timeline_zoom_level_6h, 0.9f),
+    TimelineZoomLevel(R.string.timeline_zoom_level_3h, 1.4f),
+    TimelineZoomLevel(R.string.timeline_zoom_level_1h, 2.4f),
+    TimelineZoomLevel(R.string.timeline_zoom_level_30m, 3.5f),
+    TimelineZoomLevel(R.string.timeline_zoom_level_10m, 4.5f),
+    TimelineZoomLevel(R.string.timeline_zoom_level_1m, 6f)
+)
+
+private val DefaultTimelineZoom = TimelineZoomLevels[3]
+private val MIN_TIMELINE_ZOOM = TimelineZoomLevels.first().dpPerMinute
+private val MAX_TIMELINE_ZOOM = TimelineZoomLevels.last().dpPerMinute
+
+private fun findAdjacentZoom(current: Float, direction: Int): TimelineZoomLevel? {
+    return if (direction > 0) {
+        TimelineZoomLevels.firstOrNull { it.dpPerMinute > current + 0.01f }
+    } else {
+        TimelineZoomLevels.lastOrNull { it.dpPerMinute < current - 0.01f }
+    }
+}
+
+@Composable
+private fun ZoomPanel(
+    dpPerMinute: Float,
+    onZoomLevelSelected: (Float) -> Unit,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentLevel = remember(dpPerMinute) {
+        TimelineZoomLevels.minByOrNull { level -> kotlin.math.abs(level.dpPerMinute - dpPerMinute) }
+            ?: DefaultTimelineZoom
+    }
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 6.dp,
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            IconButton(
+                onClick = onZoomOut,
+                enabled = dpPerMinute > MIN_TIMELINE_ZOOM
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Remove,
+                    contentDescription = stringResource(id = R.string.timeline_zoom_out)
+                )
+            }
+            Box {
+                TextButton(onClick = { expanded = true }) {
+                    Text(
+                        text = stringResource(id = currentLevel.labelRes),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.ExpandMore,
+                        contentDescription = null
+                    )
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    TimelineZoomLevels.forEach { level ->
+                        DropdownMenuItem(
+                            text = { Text(text = stringResource(id = level.labelRes)) },
+                            onClick = {
+                                expanded = false
+                                onZoomLevelSelected(level.dpPerMinute)
+                            }
+                        )
+                    }
+                }
+            }
+            IconButton(
+                onClick = onZoomIn,
+                enabled = dpPerMinute < MAX_TIMELINE_ZOOM
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = stringResource(id = R.string.timeline_zoom_in)
                 )
             }
         }
     }
 }
 
+@Composable
+private fun DayMiniMap(
+    tasks: List<Task>,
+    scrollState: ScrollState,
+    dpPerMinute: Float,
+    viewportHeightPx: Int,
+    modifier: Modifier = Modifier,
+    onNavigate: (Float) -> Unit
+) {
+    val density = LocalDensity.current
+    val pxPerMinute = dpPerMinute * density.density
+    val totalHeightPx = pxPerMinute * MINUTES_IN_DAY
+    val maxScroll = (totalHeightPx - viewportHeightPx).coerceAtLeast(0f)
+    val scrollFraction = if (maxScroll <= 0f) 0f else scrollState.value / maxScroll
+    val viewportFraction = if (totalHeightPx <= 0f || viewportHeightPx <= 0) 1f else viewportHeightPx / totalHeightPx
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 4.dp,
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 180.dp, height = 96.dp)
+                .pointerInput(Unit) {
+                    detectTapGestures { offset ->
+                        val fraction = (offset.y / size.height).coerceIn(0f, 1f)
+                        onNavigate(fraction)
+                    }
+                }
+        ) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                val shapeColor = MaterialTheme.colorScheme.surfaceVariant
+                drawRoundRect(
+                    color = shapeColor,
+                    cornerRadius = CornerRadius(24f, 24f)
+                )
+
+                tasks.forEach { task ->
+                    val startMinute = task.start.toMinutesOfDay()
+                    val endMinute = (task.end ?: task.start).toMinutesOfDay()
+                    val duration = (endMinute - startMinute).coerceAtLeast(1)
+                    val top = size.height * (startMinute / MINUTES_IN_DAY.toFloat())
+                    val heightPx = size.height * (duration / MINUTES_IN_DAY.toFloat())
+                        .coerceAtLeast(2f)
+                    drawRoundRect(
+                        color = taskContainerColor(task),
+                        topLeft = Offset(x = size.width * 0.15f, y = top),
+                        size = Size(width = size.width * 0.7f, height = heightPx),
+                        cornerRadius = CornerRadius(16f, 16f)
+                    )
+                }
+
+                val viewportHeight = size.height * viewportFraction
+                val viewportTop = (size.height - viewportHeight) * scrollFraction
+                drawRoundRect(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                    topLeft = Offset(x = 0f, y = viewportTop),
+                    size = Size(width = size.width, height = viewportHeight),
+                    cornerRadius = CornerRadius(24f, 24f),
+                    style = Stroke(width = 3f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberCurrentMinute(date: LocalDate): State<Int?> {
+    return produceState(initialValue = currentMinuteForDate(date), date) {
+        if (currentMinuteForDate(date) == null) {
+            value = null
+            return@produceState
+        }
+        while (true) {
+            val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+            if (now.date != date) {
+                value = null
+                break
+            }
+            value = now.time.toMinutesOfDay()
+            val millisUntilNextMinute = (60 - now.time.second) * 1_000 - now.time.nanosecond / 1_000_000
+            delay(millisUntilNextMinute.coerceAtLeast(300L))
+        }
+    }
+}
+
+private fun currentMinuteForDate(date: LocalDate): Int? {
+    val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+    return if (now.date == date) now.time.toMinutesOfDay() else null
+}
+
+private fun smartSnapMinute(rawMinute: Int, dpPerMinute: Float): Int {
+    val step = when {
+        dpPerMinute >= 4f -> 1
+        dpPerMinute >= 2.5f -> 5
+        dpPerMinute >= 1.5f -> 10
+        dpPerMinute >= 1f -> 15
+        else -> 30
+    }
+    val minute = rawMinute.coerceIn(0, MINUTES_IN_DAY - 1)
+    val remainder = minute % step
+    return if (remainder <= step / 2f) {
+        minute - remainder
+    } else {
+        (minute + (step - remainder)).coerceAtMost(MINUTES_IN_DAY - 1)
+    }
+}
+
+private fun LocalTime.toMinutesOfDay(): Int = hour * 60 + minute
+
+private fun minutesToLocalTime(minutes: Int): LocalTime {
+    val clamped = minutes.coerceIn(0, MINUTES_IN_DAY - 1)
+    val hour = clamped / 60
+    val minute = clamped % 60
+    return LocalTime(hour, minute)
+}
+
+private const val MINUTES_IN_DAY = 24 * 60
 private sealed interface DayTimelineItem {
     data class FreeTime(val start: LocalTime, val endExclusive: LocalTime?) : DayTimelineItem
     data class TaskBlock(val task: Task, val nestedPoints: List<Task> = emptyList()) : DayTimelineItem
