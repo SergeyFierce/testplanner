@@ -50,9 +50,6 @@
     <string name="tasks_count">Задач: %1$d</string>
     <string name="expand_day_tasks">Показать задачи</string>
     <string name="collapse_day_tasks">Скрыть задачи</string>
-    <string name="timeline_add_task">Добавить задачу на выбранное время</string>
-    <string name="zoom_in">Приблизить</string>
-    <string name="zoom_out">Отдалить</string>
     <string name="action_discard">Не сохранять</string>
     <string name="edit_completed_not_allowed">Выполненные задачи нельзя редактировать</string>
     <string name="unsaved_changes_title">Сохранить изменения?</string>
