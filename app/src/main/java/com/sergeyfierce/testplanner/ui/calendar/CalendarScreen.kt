@@ -24,17 +24,10 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,6 +48,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -64,7 +58,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
@@ -72,8 +65,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PriorityHigh
-import androidx.compose.material.icons.filled.ZoomIn
-import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -106,7 +97,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -122,15 +112,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.StrokeCap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -140,7 +125,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.children
 import com.sergeyfierce.testplanner.R
@@ -165,8 +149,6 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.random.Random
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
@@ -304,26 +286,22 @@ fun CalendarScreen(
                 }
             },
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            floatingActionButton = if (uiState.selectedMode == CalendarMode.DAY) {
-                null
-            } else {
-                {
-                    val bottomBarReserve = 96.dp // можно подстроить на 88–104.dp под вкус
+            floatingActionButton = {
+                val bottomBarReserve = 96.dp // можно подстроить на 88–104.dp под вкус
 
-                    FloatingActionButton(
-                        onClick = {
-                            selectedTaskIds = emptySet()
-                            isSelectionModeActive = false
-                            editingTask = null
-                            editorDefaultStart = null
-                            editorInitialType = TaskType.POINT
-                            isEditorVisible = true
-                        },
-                        modifier = Modifier
-                            .padding(bottom = bottomBarReserve) // ⬅ вместо navigationBarsPadding()
-                    ) {
-                        Icon(imageVector = Icons.Filled.Add, contentDescription = null)
-                    }
+                FloatingActionButton(
+                    onClick = {
+                        selectedTaskIds = emptySet()
+                        isSelectionModeActive = false
+                        editingTask = null
+                        editorDefaultStart = null
+                        editorInitialType = TaskType.POINT
+                        isEditorVisible = true
+                    },
+                    modifier = Modifier
+                        .padding(bottom = bottomBarReserve) // ⬅ вместо navigationBarsPadding()
+                ) {
+                    Icon(imageVector = Icons.Filled.Add, contentDescription = null)
                 }
             }
         ) { innerPadding ->
@@ -398,15 +376,7 @@ fun CalendarScreen(
                             onToggle = if (isSelectionMode) null else viewModel::onToggleTask,
                             selectedTaskIds = selectedTaskIds,
                             onTaskClick = { task -> handleTaskClick(task) },
-                            onTaskLongPress = { task -> handleTaskLongPress(task) },
-                            onAddTaskAt = { time ->
-                                selectedTaskIds = emptySet()
-                                isSelectionModeActive = false
-                                editingTask = null
-                                editorDefaultStart = time
-                                editorInitialType = TaskType.POINT
-                                isEditorVisible = true
-                            }
+                            onTaskLongPress = { task -> handleTaskLongPress(task) }
                         )
                     },
                     weekContent = {
@@ -718,167 +688,125 @@ private fun DayTimeline(
     onToggle: ((Task, Boolean) -> Unit)?,
     selectedTaskIds: Set<String>,
     onTaskClick: (Task) -> Unit,
-    onTaskLongPress: (Task) -> Unit,
-    onAddTaskAt: (LocalTime) -> Unit
+    onTaskLongPress: (Task) -> Unit
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    var scale by rememberSaveable { mutableFloatStateOf(1f) }
-    val scrollState = rememberScrollState()
-    val density = LocalDensity.current
-
-    val minuteHeight = remember(scale) { BASE_MINUTE_HEIGHT * scale }
-    val minuteHeightPx = with(density) { minuteHeight.toPx() }
-    val totalHeight = remember(minuteHeight) { minuteHeight * MINUTES_PER_DAY.toFloat() }
-
+    val listState = rememberLazyListState()
     val sortedTasks = remember(tasks) {
         tasks.sortedWith(compareBy<Task> { it.start }.thenBy { it.title })
     }
+    val timelineItems = remember(sortedTasks) {
+        buildTimeline(sortedTasks)
+    }
 
-    val currentTime by produceState(
-        initialValue = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).time
-    ) {
-        while (true) {
-            value = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).time
-            delay(60_000L)
+    LaunchedEffect(isToday) {
+        if (isToday) {
+            val currentHour = Clock.System.now()
+                .toLocalDateTime(TimeZone.currentSystemDefault()).time.hour
+            val index = timelineItems.indexOfFirst { item ->
+                item is DayTimelineItem.TaskBlock && item.task.start.hour >= currentHour
+            }.takeIf { it >= 0 } ?: 0
+            listState.scrollToItem(index)
         }
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val viewportHeight = maxHeight
-        val viewportHeightPx = with(density) { viewportHeight.toPx() }
-        val totalHeightPx = with(density) { totalHeight.toPx() }
-        val contentHeight = if (totalHeight < viewportHeight) viewportHeight else totalHeight
-
-        fun adjustScale(targetScale: Float, focus: Float? = null) {
-            val clamped = targetScale.coerceIn(MIN_ZOOM_SCALE, MAX_ZOOM_SCALE)
-            if (clamped == scale) return
-            val focusCenter = focus ?: (scrollState.value + viewportHeightPx / 2f)
-            val focusFraction = if (totalHeightPx <= 0f) 0f else focusCenter / totalHeightPx
-            scale = clamped
-            val newMinuteHeightPx = with(density) { (BASE_MINUTE_HEIGHT * clamped).toPx() }
-            val newTotalHeightPx = newMinuteHeightPx * MINUTES_PER_DAY
-            val targetScroll = (focusFraction * newTotalHeightPx - viewportHeightPx / 2f)
-                .coerceIn(0f, (newTotalHeightPx - viewportHeightPx).coerceAtLeast(0f))
-            coroutineScope.launch { scrollState.scrollTo(targetScroll.roundToInt()) }
-        }
-
-        val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
-            if (zoomChange != 1f) {
-                adjustScale(scale * zoomChange)
-            }
-            if (panChange.y != 0f) {
-                scrollState.dispatchRawDelta(-panChange.y)
-            }
-        }
-
-        var autoPositioned by rememberSaveable { mutableStateOf(false) }
-        LaunchedEffect(isToday, minuteHeight) {
-            if (isToday && !autoPositioned) {
-                val nowMinutes = currentTime.hour * 60 + currentTime.minute
-                val target = (nowMinutes * minuteHeightPx - viewportHeightPx / 2f)
-                    .coerceIn(0f, (totalHeightPx - viewportHeightPx).coerceAtLeast(0f))
-                scrollState.scrollTo(target.roundToInt())
-                autoPositioned = true
-            }
-        }
-
-        val scrollProgress by remember {
-            derivedStateOf {
-                val maxScroll = (totalHeightPx - viewportHeightPx).coerceAtLeast(0f)
-                if (maxScroll == 0f) 0f else scrollState.value / maxScroll
-            }
-        }
-        val viewportFraction by remember {
-            derivedStateOf {
-                if (totalHeightPx == 0f) 1f else (viewportHeightPx / totalHeightPx).coerceIn(0f, 1f)
-            }
-        }
-
-        val addTask: () -> Unit = remember(onAddTaskAt, minuteHeightPx, viewportHeightPx, scrollState.value) {
-            {
-                val centerMinutes = if (minuteHeightPx == 0f) {
-                    0f
-                } else {
-                    (scrollState.value + viewportHeightPx / 2f) / minuteHeightPx
-                }
-                val snapped = snapToSmartInterval(centerMinutes, minuteHeightPx)
-                onAddTaskAt(minutesToLocalTime(snapped))
-            }
-        }
-
-        Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(end = 96.dp)
-                    .verticalScroll(scrollState)
-                    .transformable(transformableState)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .height(contentHeight)
-                        .fillMaxWidth()
-                ) {
-                    TimeLabelColumn(
-                        minuteHeight = minuteHeight,
-                        totalMinutes = MINUTES_PER_DAY,
-                        modifier = Modifier
-                            .width(TIME_LABEL_WIDTH)
-                            .fillMaxHeight()
-                    )
-                    TimelineTrack(
-                        tasks = sortedTasks,
-                        minuteHeight = minuteHeight,
-                        isToday = isToday,
-                        currentTime = currentTime,
-                        onToggle = onToggle,
-                        selectedTaskIds = selectedTaskIds,
-                        onTaskClick = onTaskClick,
-                        onTaskLongPress = onTaskLongPress,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                    )
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 0.dp)
+    ) {
+        items(
+            items = timelineItems,
+            key = { item ->
+                when (item) {
+                    is DayTimelineItem.FreeTime -> "free-${item.start}-${item.endExclusive}"
+                    is DayTimelineItem.TaskBlock -> item.task.id
                 }
             }
-
-            ZoomControlPanel(
-                scale = scale,
-                onZoomIn = { adjustScale(scale * 1.2f) },
-                onZoomOut = { adjustScale(scale / 1.2f) },
-                onLevelSelected = { adjustScale(it) },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 16.dp, end = 16.dp)
-            )
-
-            AnimatedVisibility(
-                visible = viewportFraction < 0.995f,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(16.dp)
-            ) {
-                DayMiniMap(
-                    tasks = sortedTasks,
-                    scrollProgress = scrollProgress,
-                    viewportFraction = viewportFraction,
-                    onSeek = { fraction ->
-                        val maxScroll = (totalHeightPx - viewportHeightPx).coerceAtLeast(0f)
-                        val target = (fraction * maxScroll).coerceIn(0f, maxScroll)
-                        coroutineScope.launch {
-                            scrollState.animateScrollTo(target.roundToInt())
+        ) { item ->
+            val placementModifier = Modifier
+                .fillMaxWidth()
+                .animateItemPlacement(animationSpec = tween(durationMillis = 300))
+            when (item) {
+                is DayTimelineItem.FreeTime -> Box(modifier = placementModifier) {
+                    FreeTimeCard(
+                        freeTime = item
+                    )
+                }
+                is DayTimelineItem.TaskBlock -> {
+                    Box(modifier = placementModifier) {
+                        if (item.task.isInterval) {
+                            IntervalTaskCard(
+                                task = item.task,
+                                nestedPoints = item.nestedPoints,
+                                onToggle = onToggle,
+                                showCheckbox = onToggle != null,
+                                isSelected = selectedTaskIds.contains(item.task.id),
+                                selectedTaskIds = selectedTaskIds,
+                                onClick = { onTaskClick(item.task) },
+                                onLongPress = { onTaskLongPress(item.task) },
+                                onNestedClick = onTaskClick,
+                                onNestedLongPress = onTaskLongPress
+                            )
+                        } else {
+                            PointTaskCard(
+                                task = item.task,
+                                onToggle = onToggle,
+                                showCheckbox = onToggle != null,
+                                isSelected = selectedTaskIds.contains(item.task.id),
+                                onClick = { onTaskClick(item.task) },
+                                onLongPress = { onTaskLongPress(item.task) }
+                            )
                         }
                     }
-                )
+                }
             }
+        }
+    }
+}
 
-            FloatingActionButton(
-                onClick = addTask,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(24.dp)
-            ) {
-                Icon(imageVector = Icons.Filled.Add, contentDescription = stringResource(id = R.string.timeline_add_task))
+@Composable
+private fun FreeTimeCard(
+    freeTime: DayTimelineItem.FreeTime
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Surface(
+        shape = shape,
+        tonalElevation = 2.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            val isWholeDay = freeTime.start == LocalTime(0, 0) && freeTime.endExclusive == null
+            Text(
+                text = if (isWholeDay) {
+                    stringResource(id = R.string.free_day_title)
+                } else {
+                    stringResource(id = R.string.free_time_title)
+                },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            if (isWholeDay) {
+                Text(
+                    text = stringResource(id = R.string.free_day_message),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                val endLabel = freeTime.endExclusive?.toTimeLabel()
+                    ?: stringResource(id = R.string.free_time_until_end)
+                Text(
+                    text = stringResource(
+                        id = R.string.free_time_range,
+                        freeTime.start.toTimeLabel(),
+                        endLabel
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -888,414 +816,6 @@ private sealed interface DayTimelineItem {
     data class FreeTime(val start: LocalTime, val endExclusive: LocalTime?) : DayTimelineItem
     data class TaskBlock(val task: Task, val nestedPoints: List<Task> = emptyList()) : DayTimelineItem
 }
-
-private val TIME_LABEL_WIDTH = 64.dp
-private val BASE_MINUTE_HEIGHT = 0.75.dp
-private val MIN_TASK_HEIGHT = 36.dp
-private val MINI_MAP_WIDTH = 96.dp
-private val MINI_MAP_HEIGHT = 200.dp
-private const val MINUTES_PER_DAY = 24 * 60
-private const val DEFAULT_POINT_DURATION_MINUTES = 15
-private const val MIN_ZOOM_SCALE = 0.35f
-private const val MAX_ZOOM_SCALE = 3.2f
-
-@Composable
-private fun TimeLabelColumn(
-    minuteHeight: Dp,
-    totalMinutes: Int,
-    modifier: Modifier = Modifier
-) {
-    val density = LocalDensity.current
-    val minuteHeightPx = with(density) { minuteHeight.toPx() }
-    val stepMinutes = when {
-        minuteHeightPx >= 140f -> 15
-        minuteHeightPx >= 80f -> 30
-        minuteHeightPx >= 35f -> 60
-        else -> 120
-    }
-
-    Box(modifier = modifier) {
-        for (minute in 0 until totalMinutes step stepMinutes) {
-            val offset = minuteHeight * minute.toFloat()
-            val labelOffset = (offset - 10.dp).coerceAtLeast(0.dp)
-            Text(
-                text = minutesToLocalTime(minute).toTimeLabel(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .offset(y = labelOffset)
-                    .padding(horizontal = 8.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun TimelineTrack(
-    tasks: List<Task>,
-    minuteHeight: Dp,
-    isToday: Boolean,
-    currentTime: LocalTime,
-    onToggle: ((Task, Boolean) -> Unit)?,
-    selectedTaskIds: Set<String>,
-    onTaskClick: (Task) -> Unit,
-    onTaskLongPress: (Task) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val density = LocalDensity.current
-    val minuteHeightPx = with(density) { minuteHeight.toPx() }
-    val backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-    val gridMajorColor = MaterialTheme.colorScheme.outline
-    val currentLineColor = MaterialTheme.colorScheme.primary
-    val indicatorRadius = with(density) { 6.dp.toPx() }
-
-    val entries = remember(tasks) {
-        tasks.map { task ->
-            TimelineVisualTask(
-                task = task,
-                startMinutes = task.start.hour * 60 + task.start.minute,
-                durationMinutes = taskDurationMinutes(task)
-            )
-        }
-    }
-
-    Box(
-        modifier = modifier
-            .background(backgroundColor)
-            .clipToBounds()
-    ) {
-        Canvas(modifier = Modifier.matchParentSize()) {
-            val width = size.width
-            val majorStep = computeMajorStep(minuteHeightPx)
-            val minorStep = computeMinorStep(minuteHeightPx)
-            for (minute in 0..MINUTES_PER_DAY step minorStep) {
-                val y = minute * minuteHeightPx
-                if (y > size.height) break
-                val isMajor = minute % majorStep == 0
-                val color = if (isMajor) gridMajorColor else gridColor
-                val strokeWidth = if (isMajor) 2f else 1f
-                drawLine(
-                    color = color,
-                    start = Offset(x = 0f, y = y),
-                    end = Offset(x = width, y = y),
-                    strokeWidth = strokeWidth
-                )
-            }
-        }
-
-        entries.forEach { entry ->
-            val topOffset = minuteHeight * entry.startMinutes.toFloat()
-            val height = (minuteHeight * entry.durationMinutes.toFloat()).coerceAtLeast(MIN_TASK_HEIGHT)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .offset(y = topOffset)
-                    .height(height)
-            ) {
-                TimelineTaskCard(
-                    task = entry.task,
-                    onToggle = onToggle,
-                    isSelected = selectedTaskIds.contains(entry.task.id),
-                    onClick = { onTaskClick(entry.task) },
-                    onLongPress = { onTaskLongPress(entry.task) }
-                )
-            }
-        }
-
-        if (isToday) {
-            Canvas(modifier = Modifier.matchParentSize()) {
-                val nowMinutes = currentTime.hour * 60 + currentTime.minute
-                val y = nowMinutes * minuteHeightPx
-                if (y in 0f..size.height) {
-                    drawLine(
-                        color = currentLineColor,
-                        start = Offset(x = 0f, y = y),
-                        end = Offset(x = size.width, y = y),
-                        strokeWidth = 4f,
-                        cap = StrokeCap.Round
-                    )
-                    drawCircle(
-                        color = currentLineColor,
-                        radius = indicatorRadius,
-                        center = Offset(x = indicatorRadius * 1.5f, y = y)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TimelineTaskCard(
-    task: Task,
-    onToggle: ((Task, Boolean) -> Unit)?,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    onLongPress: () -> Unit
-) {
-    val shape = RoundedCornerShape(14.dp)
-    val containerColor = taskContainerColor(task, useIntervalStyle = !task.isInterval)
-    val contentColor = taskContentColor(task, useIntervalStyle = !task.isInterval)
-    val border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
-    val tonalElevation = if (task.isInterval) 6.dp else 3.dp
-    val contentAlpha by animateFloatAsState(
-        targetValue = if (task.isDone) 0.55f else 1f,
-        animationSpec = tween(durationMillis = 200),
-        label = "timeline-task-alpha"
-    )
-
-    Surface(
-        shape = shape,
-        color = containerColor,
-        contentColor = contentColor,
-        tonalElevation = tonalElevation,
-        border = border,
-        modifier = Modifier
-            .fillMaxSize()
-            .clip(shape)
-            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .alpha(contentAlpha),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = timeRangeLabel(task),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-                ImportantDot(visible = task.isImportant)
-                if (onToggle != null) {
-                    Checkbox(
-                        checked = task.isDone,
-                        onCheckedChange = { checked -> onToggle(task, checked) }
-                    )
-                } else if (task.isDone) {
-                    Icon(
-                        imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-            }
-            Text(
-                text = task.title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            task.description?.takeIf { it.isNotBlank() }?.let { description ->
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ZoomControlPanel(
-    scale: Float,
-    onZoomIn: () -> Unit,
-    onZoomOut: () -> Unit,
-    onLevelSelected: (Float) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val zoomLevels = remember { listOf(0.35f, 0.6f, 0.9f, 1.2f, 1.8f, 2.4f, 3.2f) }
-        .map { it.coerceIn(MIN_ZOOM_SCALE, MAX_ZOOM_SCALE) }
-        .distinct()
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 6.dp,
-        modifier = modifier
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(onClick = onZoomOut, enabled = scale > MIN_ZOOM_SCALE) {
-                    Icon(imageVector = Icons.Filled.ZoomOut, contentDescription = stringResource(id = R.string.zoom_out))
-                }
-                IconButton(onClick = onZoomIn, enabled = scale < MAX_ZOOM_SCALE) {
-                    Icon(imageVector = Icons.Filled.ZoomIn, contentDescription = stringResource(id = R.string.zoom_in))
-                }
-            }
-            zoomLevels.chunked(3).forEach { chunk ->
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    chunk.forEach { level ->
-                        val isSelected = isSameZoomLevel(scale, level)
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { onLevelSelected(level) },
-                            label = { Text(text = zoomLabel(level)) },
-                            modifier = Modifier.padding(vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun DayMiniMap(
-    tasks: List<Task>,
-    scrollProgress: Float,
-    viewportFraction: Float,
-    onSeek: (Float) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val density = LocalDensity.current
-    var dragProgress by remember { mutableFloatStateOf(scrollProgress) }
-    LaunchedEffect(scrollProgress) { dragProgress = scrollProgress }
-
-    val draggableState = rememberDraggableState { delta ->
-        val heightPx = with(density) { MINI_MAP_HEIGHT.toPx() }
-        if (heightPx > 0f) {
-            val fractionDelta = delta / heightPx
-            dragProgress = (dragProgress + fractionDelta).coerceIn(0f, 1f)
-            onSeek(dragProgress)
-        }
-    }
-
-    val entries = tasks.map { task ->
-        MiniMapEntry(
-            startMinutes = task.start.hour * 60 + task.start.minute,
-            durationMinutes = taskDurationMinutes(task),
-            color = taskContainerColor(task)
-        )
-    }
-
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 6.dp,
-        modifier = modifier
-            .width(MINI_MAP_WIDTH)
-            .height(MINI_MAP_HEIGHT)
-            .draggable(
-                state = draggableState,
-                orientation = Orientation.Vertical,
-                startDragImmediately = true,
-                onDragStarted = { dragProgress = scrollProgress }
-            )
-            .pointerInput(scrollProgress) {
-                detectTapGestures { offset ->
-                    val fraction = if (size.height == 0f) 0f else (offset.y / size.height).coerceIn(0f, 1f)
-                    dragProgress = fraction
-                    onSeek(fraction)
-                }
-            }
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val width = size.width
-            val height = size.height
-            val viewportHeight = (viewportFraction * height).coerceAtLeast(8f)
-            entries.forEach { entry ->
-                val top = (entry.startMinutes.toFloat() / MINUTES_PER_DAY) * height
-                val blockHeight = (entry.durationMinutes.toFloat() / MINUTES_PER_DAY) * height
-                val clampedHeight = blockHeight.coerceAtLeast(3f)
-                val topClamped = top.coerceIn(0f, height - clampedHeight)
-                drawRoundRect(
-                    color = entry.color.copy(alpha = 0.6f),
-                    topLeft = Offset(x = width * 0.2f, y = topClamped),
-                    size = Size(width * 0.6f, clampedHeight),
-                    cornerRadius = CornerRadius(6f, 6f)
-                )
-            }
-            val indicatorTop = (scrollProgress * height).coerceIn(0f, height - viewportHeight)
-            val indicatorColor = MaterialTheme.colorScheme.primary
-            drawRoundRect(
-                color = indicatorColor.copy(alpha = 0.12f),
-                topLeft = Offset(0f, indicatorTop),
-                size = Size(width, viewportHeight),
-                cornerRadius = CornerRadius(12f, 12f)
-            )
-            drawRoundRect(
-                color = indicatorColor,
-                topLeft = Offset(0f, indicatorTop),
-                size = Size(width, viewportHeight),
-                cornerRadius = CornerRadius(12f, 12f),
-                style = Stroke(width = 3f)
-            )
-        }
-    }
-}
-
-private data class TimelineVisualTask(
-    val task: Task,
-    val startMinutes: Int,
-    val durationMinutes: Int
-)
-
-private data class MiniMapEntry(
-    val startMinutes: Int,
-    val durationMinutes: Int,
-    val color: Color
-)
-
-private fun computeMajorStep(minuteHeightPx: Float): Int = when {
-    minuteHeightPx >= 140f -> 15
-    minuteHeightPx >= 80f -> 30
-    minuteHeightPx >= 35f -> 60
-    else -> 120
-}
-
-private fun computeMinorStep(minuteHeightPx: Float): Int = when {
-    minuteHeightPx >= 140f -> 5
-    minuteHeightPx >= 80f -> 15
-    minuteHeightPx >= 35f -> 30
-    else -> 60
-}
-
-private fun taskDurationMinutes(task: Task): Int {
-    val raw = task.end?.let { minutesBetween(task.start, it) } ?: DEFAULT_POINT_DURATION_MINUTES
-    return raw.coerceAtLeast(1)
-}
-
-private fun minutesToLocalTime(minutes: Int): LocalTime {
-    val clamped = minutes.coerceIn(0, MINUTES_PER_DAY - 1)
-    val hour = clamped / 60
-    val minute = clamped % 60
-    return LocalTime(hour, minute)
-}
-
-private fun snapToSmartInterval(minutes: Float, minuteHeightPx: Float): Int {
-    val step = when {
-        minuteHeightPx >= 140f -> 1
-        minuteHeightPx >= 80f -> 5
-        minuteHeightPx >= 40f -> 10
-        else -> 15
-    }
-    val snapped = ((minutes / step).roundToInt()) * step
-    return snapped.coerceIn(0, MINUTES_PER_DAY - 1)
-}
-
-private fun isSameZoomLevel(current: Float, target: Float): Boolean = abs(current - target) < 0.05f
-
-private fun zoomLabel(level: Float): String {
-    val digits = if (level >= 1f) 1 else 2
-    return "×${level.format(digits)}"
-}
-
-private fun Float.format(digits: Int): String = String.format(Locale.getDefault(), "%0.${digits}f", this)
 
 private const val MIN_FREE_SLOT_MINUTES = 60
 
